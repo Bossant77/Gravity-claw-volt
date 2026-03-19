@@ -4,7 +4,7 @@ import { registerTool } from "./registry.js";
 import { SchemaType } from "@google/generative-ai";
 import { config } from "../config.js";
 import { log } from "../logger.js";
-import { simpleParser } from "mailparser";
+import { simpleParser, type ParsedMail } from "mailparser";
 
 export function registerEmailTool(): void {
   // Only register if email is configured
@@ -100,10 +100,13 @@ export function registerEmailTool(): void {
 
         try {
           const messages: string[] = [];
-          const searchCriteria = unreadOnly ? { seen: false } : { all: true };
+          const searchResult = await client.search(
+            unreadOnly ? { seen: false } : { all: true },
+            { uid: true }
+          );
 
-          // Get message sequence numbers
-          const uids = await client.search(searchCriteria, { uid: true });
+          // search can return false if no results
+          const uids = Array.isArray(searchResult) ? searchResult : [];
           const recentUids = uids.slice(-count);
 
           if (recentUids.length === 0) {
@@ -115,7 +118,8 @@ export function registerEmailTool(): void {
             source: true,
             uid: true,
           })) {
-            const parsed = await simpleParser(msg.source);
+            if (!msg.source) continue;
+            const parsed: ParsedMail = await simpleParser(msg.source);
             const from = parsed.from?.text ?? "unknown";
             const subject = parsed.subject ?? "(no subject)";
             const date = parsed.date?.toLocaleDateString() ?? "";
@@ -176,12 +180,12 @@ export function registerEmailTool(): void {
         const lock = await client.getMailboxLock("INBOX");
 
         try {
-          // Search by subject OR from
-          const uids = await client.search(
+          const searchResult = await client.search(
             { or: [{ subject: searchQuery }, { from: searchQuery }] },
             { uid: true }
           );
 
+          const uids = Array.isArray(searchResult) ? searchResult : [];
           const recentUids = uids.slice(-count);
 
           if (recentUids.length === 0) {
@@ -194,9 +198,10 @@ export function registerEmailTool(): void {
             source: true,
             uid: true,
           })) {
-            const parsed = await simpleParser(msg.source);
+            if (!msg.source) continue;
+            const parsed: ParsedMail = await simpleParser(msg.source);
             messages.push(
-              `📧 From: ${parsed.from?.text}\n📌 ${parsed.subject}\n📅 ${parsed.date?.toLocaleDateString()}`
+              `📧 From: ${parsed.from?.text ?? "unknown"}\n📌 ${parsed.subject ?? "(no subject)"}\n📅 ${parsed.date?.toLocaleDateString() ?? ""}`
             );
           }
 

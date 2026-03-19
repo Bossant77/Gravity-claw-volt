@@ -38,7 +38,6 @@ const SCHEMA_SQL = `
 
   -- Semantic memories (vector embeddings)
   -- gemini-embedding-001 returns 3072 dimensions
-  DROP TABLE IF EXISTS memories;
   CREATE TABLE IF NOT EXISTS memories (
     id          SERIAL PRIMARY KEY,
     chat_id     BIGINT       NOT NULL,
@@ -63,6 +62,20 @@ const SCHEMA_SQL = `
 
   CREATE INDEX IF NOT EXISTS idx_reminders_due
     ON reminders (due_at) WHERE delivered = false;
+
+  -- Lessons (self-learning from corrections)
+  CREATE TABLE IF NOT EXISTS lessons (
+    id          SERIAL PRIMARY KEY,
+    chat_id     BIGINT        NOT NULL,
+    context     TEXT          NOT NULL,
+    correction  TEXT          NOT NULL,
+    lesson      TEXT          NOT NULL,
+    embedding   vector(3072)  NOT NULL,
+    created_at  TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_lessons_chat_id
+    ON lessons (chat_id);
 `;
 
 // ── Public API ──────────────────────────────────────────

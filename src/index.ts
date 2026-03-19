@@ -9,6 +9,7 @@ import { registerShellTool } from "./tools/shell.js";
 import { registerFilesTool } from "./tools/files.js";
 import { registerDocumentsTool } from "./tools/documents.js";
 import { registerRemindersTool, setReminderBot, startReminderScheduler } from "./tools/reminders.js";
+import { registerEmailTool } from "./tools/email.js";
 import { setHeartbeatBot, startHeartbeats } from "./heartbeat.js";
 
 // ── Banner ──────────────────────────────────────────────
@@ -16,8 +17,8 @@ import { setHeartbeatBot, startHeartbeats } from "./heartbeat.js";
 console.log(`
    ⚡ G R A V I T Y   C L A W ⚡
    ─────────────────────────────
-   Personal AI Agent · Level 5
-   Tools + Memory + Voice + 💓
+   Personal AI Agent · Level 6
+   Self-Learning + Email + 💓
    ─────────────────────────────
 `);
 
@@ -30,6 +31,7 @@ function registerAllTools() {
   registerFilesTool();
   registerDocumentsTool();
   registerRemindersTool();
+  registerEmailTool();
 }
 
 // ── Start Bot ───────────────────────────────────────────

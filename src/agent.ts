@@ -8,6 +8,7 @@ import {
   storeMemory,
   searchMemories,
 } from "./memory.js";
+import { isCorrection, extractLesson, storeLesson, findRelevantLessons } from "./learning.js";
 import { executeTool } from "./tools/registry.js";
 import type { AgentMessage, AgentResponse } from "./types.js";
 import type { Content } from "@google/generative-ai";
@@ -29,6 +30,7 @@ export async function runAgent(
 
   const history = await getRecentMessages(chatId, 50);
   const relevantMemories = await searchMemories(chatId, userMessage, 5);
+  const relevantLessons = await findRelevantLessons(chatId, userMessage, 3);
 
   // Build initial Gemini history
   const pastMessages = history.slice(0, -1).filter(
@@ -38,17 +40,20 @@ export async function runAgent(
   const geminiHistory = toGeminiHistory(pastMessages);
 
   // First LLM call
-  let response = await chat(geminiHistory, userMessage, relevantMemories);
+  let response = await chat(geminiHistory, userMessage, relevantMemories, relevantLessons);
 
   // Build conversation contents for multi-turn tool calling
   let memoryContext = "";
   if (relevantMemories.length > 0) {
-    memoryContext = `\n\nRelevant memories from past conversations:\n${relevantMemories.map((m, i) => `[${i + 1}] ${m}`).join("\n\n")}`;
+    memoryContext += `\n\nRelevant memories from past conversations:\n${relevantMemories.map((m, i) => `[${i + 1}] ${m}`).join("\n\n")}`;
+  }
+  if (relevantLessons.length > 0) {
+    memoryContext += `\n\nLessons I've learned from past corrections (apply these!):\n${relevantLessons.map((l, i) => `[Lesson ${i + 1}] ${l}`).join("\n\n")}`;
   }
 
   const conversationContents: Content[] = [
     { role: "user", parts: [{ text: SYSTEM_PROMPT + memoryContext }] },
-    { role: "model", parts: [{ text: "Understood. I am Gravity Claw, ready with tools. How can I help?" }] },
+    { role: "model", parts: [{ text: "Understood. I am Gravity Claw, ready with tools and my learned lessons. How can I help?" }] },
     ...geminiHistory,
     { role: "user", parts: [{ text: userMessage }] },
   ];
@@ -118,6 +123,16 @@ export async function runAgent(
 
   const memoryContent = `User: ${userMessage}\nAssistant: ${finalText}`;
   storeMemory(chatId, memoryContent).catch(() => {});
+
+  // Self-learning: detect corrections and store lessons
+  if (isCorrection(userMessage) && history.length > 1) {
+    const lastAssistantMsg = history.filter((m) => m.role === "assistant").pop();
+    if (lastAssistantMsg) {
+      const lesson = await extractLesson(lastAssistantMsg.content, userMessage);
+      storeLesson(chatId, lastAssistantMsg.content, userMessage, lesson).catch(() => {});
+      log.info({ chatId }, "Self-learning: lesson extracted from correction");
+    }
+  }
 
   log.info({ chatId, iterations, toolsUsed: iterations - 1 }, "Agent loop completed");
   return { text: finalText, iterations, files: files.filter((f): f is NonNullable<typeof f> => !!f) };

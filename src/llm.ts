@@ -72,6 +72,60 @@ export async function chat(
 }
 
 /**
+ * Send audio + conversation history to Gemini for multimodal processing.
+ * Gemini transcribes the audio and responds in one step.
+ */
+export async function chatWithAudio(
+  history: Content[],
+  audioBuffer: Buffer,
+  mimeType: string,
+  relevantMemories: string[] = []
+): Promise<string> {
+  log.debug({ audioSizeKB: Math.round(audioBuffer.length / 1024), mimeType }, "Sending audio to Gemini");
+
+  // Build memory context
+  let memoryContext = "";
+  if (relevantMemories.length > 0) {
+    memoryContext = `\n\nRelevant memories from past conversations:\n${relevantMemories.map((m, i) => `[${i + 1}] ${m}`).join("\n\n")}`;
+  }
+
+  const audioPrompt = `The user sent a voice message. First, understand what they said. Then respond naturally to their message. If the audio is unclear, ask for clarification.`;
+
+  const contents: Content[] = [
+    // System context
+    { role: "user", parts: [{ text: SYSTEM_PROMPT + memoryContext }] },
+    { role: "model", parts: [{ text: "Understood. I am Gravity Claw. How can I help?" }] },
+    // Conversation history
+    ...history,
+    // Audio message with instruction
+    {
+      role: "user",
+      parts: [
+        {
+          inlineData: {
+            mimeType,
+            data: audioBuffer.toString("base64"),
+          },
+        },
+        { text: audioPrompt },
+      ],
+    },
+  ];
+
+  try {
+    const result = await model.generateContent({ contents });
+    const text = result.response.text();
+
+    log.debug({ responseLength: text.length }, "Gemini audio response received");
+    return text;
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    log.error({ err }, "Gemini audio API error");
+    throw new Error(`Gemini audio error: ${errorMsg}`);
+  }
+}
+
+/**
  * Convert our simple message history into Gemini's Content format.
  */
 export function toGeminiHistory(
@@ -82,3 +136,4 @@ export function toGeminiHistory(
     parts: [{ text: msg.content }] as Part[],
   }));
 }
+

@@ -1,4 +1,4 @@
-import { chat, toGeminiHistory } from "./llm.js";
+import { chat, chatWithAudio, toGeminiHistory } from "./llm.js";
 import { log } from "./logger.js";
 import { config } from "./config.js";
 import {
@@ -48,7 +48,6 @@ export async function runAgent(
     // Call LLM (with semantic context if available)
     const response = await chat(geminiHistory, lastUserMsg, relevantMemories);
 
-    // Level 2: no tool calls, just text back
     finalText = response;
 
     // Save assistant response to database
@@ -58,7 +57,6 @@ export async function runAgent(
     const memoryContent = `User: ${userMessage}\nAssistant: ${response}`;
     storeMemory(chatId, memoryContent).catch(() => {});
 
-    // No tool calls → loop ends after 1 iteration
     break;
   }
 
@@ -72,9 +70,49 @@ export async function runAgent(
 }
 
 /**
+ * Process a voice message through the agent.
+ * Downloads audio → sends to Gemini multimodal → text response.
+ */
+export async function runVoiceAgent(
+  chatId: number,
+  audioBuffer: Buffer,
+  mimeType: string
+): Promise<AgentResponse> {
+  // Save a placeholder for the voice message in history
+  await saveMessage(chatId, "user", "[🎙️ Voice message]");
+
+  // Load conversation history
+  const history = await getRecentMessages(chatId, 50);
+
+  // Search semantic memories (use generic query since we don't have text yet)
+  const relevantMemories = await searchMemories(chatId, "voice message", 3);
+
+  // Build Gemini history (everything except the last placeholder)
+  const pastMessages = history.slice(0, -1).filter(
+    (m): m is AgentMessage & { role: "user" | "assistant" } =>
+      m.role === "user" || m.role === "assistant"
+  );
+  const geminiHistory = toGeminiHistory(pastMessages);
+
+  // Send audio to Gemini for transcription + response
+  const response = await chatWithAudio(geminiHistory, audioBuffer, mimeType, relevantMemories);
+
+  // Save assistant response
+  await saveMessage(chatId, "assistant", response);
+
+  // Store as semantic memory
+  const memoryContent = `User: [voice message]\nAssistant: ${response}`;
+  storeMemory(chatId, memoryContent).catch(() => {});
+
+  log.info({ chatId }, "Voice agent completed");
+  return { text: response, iterations: 1 };
+}
+
+/**
  * Clear conversation history for a chat.
  */
 export async function clearHistory(chatId: number): Promise<void> {
   await clearMessages(chatId);
   log.info({ chatId }, "Conversation history cleared");
 }
+

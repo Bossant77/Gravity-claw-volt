@@ -7,8 +7,8 @@ import { initDatabase, shutdown as dbShutdown } from "./db.js";
 console.log(`
    ⚡ G R A V I T Y   C L A W ⚡
    ─────────────────────────────
-   Personal AI Agent · Level 2
-   Telegram + Gemini + Memory
+   Personal AI Agent · Level 3
+   Telegram + Gemini + Memory + Voice
    ─────────────────────────────
 `);
 

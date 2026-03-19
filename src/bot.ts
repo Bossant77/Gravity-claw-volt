@@ -1,7 +1,8 @@
 import { Bot } from "grammy";
 import { config } from "./config.js";
 import { log } from "./logger.js";
-import { runAgent, clearHistory } from "./agent.js";
+import { runAgent, runVoiceAgent, clearHistory } from "./agent.js";
+import { downloadTelegramFile } from "./voice.js";
 
 // ── Bot Instance ────────────────────────────────────────
 
@@ -78,6 +79,33 @@ bot.on("message:text", async (ctx) => {
     await ctx.reply(
       `⚠️ Error: ${errorMsg.slice(0, 500)}`
     );
+  }
+});
+
+// ── Voice Handler ───────────────────────────────────────
+
+bot.on(["message:voice", "message:video_note"], async (ctx) => {
+  const chatId = ctx.chat.id;
+  const fileId = ctx.message.voice?.file_id ?? ctx.message.video_note?.file_id;
+
+  if (!fileId) return;
+
+  log.info({ chatId, type: ctx.message.voice ? "voice" : "video_note" }, "Incoming voice message");
+
+  await ctx.replyWithChatAction("typing");
+
+  try {
+    const { buffer, mimeType } = await downloadTelegramFile(fileId);
+    const response = await runVoiceAgent(chatId, buffer, mimeType);
+
+    const chunks = splitMessage(response.text, 4096);
+    for (const chunk of chunks) {
+      await ctx.reply(chunk);
+    }
+  } catch (err) {
+    log.error({ err, chatId }, "Voice agent error");
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    await ctx.reply(`⚠️ Error processing voice: ${errorMsg.slice(0, 500)}`);
   }
 });
 

@@ -37,11 +37,13 @@ const SCHEMA_SQL = `
     ON messages (chat_id, created_at DESC);
 
   -- Semantic memories (vector embeddings)
+  -- gemini-embedding-001 returns 3072 dimensions
+  DROP TABLE IF EXISTS memories;
   CREATE TABLE IF NOT EXISTS memories (
     id          SERIAL PRIMARY KEY,
     chat_id     BIGINT       NOT NULL,
     content     TEXT         NOT NULL,
-    embedding   vector(768)  NOT NULL,
+    embedding   vector(3072) NOT NULL,
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
   );
 

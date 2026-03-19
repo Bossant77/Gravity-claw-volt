@@ -57,7 +57,7 @@ export async function getRecentMessages(
   );
 
   // Reverse to get chronological order (oldest first)
-  return result.rows.reverse().map((row) => ({
+  return result.rows.reverse().map((row: { role: string; content: string }) => ({
     role: row.role as AgentMessage["role"],
     content: row.content,
   }));
@@ -120,8 +120,8 @@ export async function searchMemories(
     );
 
     return result.rows
-      .filter((r) => r.similarity > 0.3) // relevance threshold
-      .map((r) => r.content);
+      .filter((r: { content: string; similarity: number }) => r.similarity > 0.3)
+      .map((r: { content: string; similarity: number }) => r.content);
   } catch (err) {
     log.error({ err }, "Semantic memory search failed");
     return []; // graceful degradation

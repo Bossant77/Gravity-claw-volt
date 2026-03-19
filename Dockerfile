@@ -21,13 +21,16 @@ RUN mkdir -p /home/claw/workspace && chmod 777 /home/claw/workspace
 
 WORKDIR /app
 
-# Install dependencies
+# Install ALL dependencies (including dev for build)
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm ci
 
 # Copy source and build
 COPY tsconfig.json ./
 COPY src/ src/
 RUN npm run build
+
+# Remove dev dependencies after build
+RUN npm prune --omit=dev
 
 CMD ["node", "dist/index.js"]

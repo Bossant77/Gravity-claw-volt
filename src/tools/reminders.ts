@@ -116,7 +116,7 @@ export function registerRemindersTool(): void {
       }
 
       const lines = result.rows.map(
-        (r) => `#${r.id} — ${new Date(r.due_at).toLocaleString()}: ${r.message}`
+        (r: { id: number; message: string; due_at: Date }) => `#${r.id} — ${new Date(r.due_at).toLocaleString()}: ${r.message}`
       );
       return { result: `Active reminders:\n${lines.join("\n")}` };
     },

@@ -67,13 +67,10 @@ export async function runAgent(
     }
 
     if (response.functionCalls && response.functionCalls.length > 0) {
-      // Add model's function call to conversation
-      conversationContents.push({
-        role: "model",
-        parts: response.functionCalls.map((fc) => ({
-          functionCall: { name: fc.name, args: fc.args },
-        })),
-      });
+      // Add model's raw response to conversation (preserves thought_signature)
+      if (response.modelContent) {
+        conversationContents.push(response.modelContent);
+      }
 
       // Execute each function call
       const functionResponseParts = [];

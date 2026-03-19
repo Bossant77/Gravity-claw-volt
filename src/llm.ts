@@ -37,6 +37,8 @@ const model = genAI.getGenerativeModel({
 export interface LLMResponse {
   text?: string;
   functionCalls?: FunctionCall[];
+  /** Raw model content — must be preserved for multi-turn tool calling */
+  modelContent?: Content;
 }
 
 // ── Public API ──────────────────────────────────────────
@@ -83,7 +85,9 @@ export async function chat(
       .map((p) => p.functionCall);
 
     if (functionCalls.length > 0) {
-      return { functionCalls };
+      // Return raw model content to preserve thought_signature
+      const modelContent = response.candidates?.[0]?.content;
+      return { functionCalls, modelContent: modelContent ?? undefined };
     }
 
     // Otherwise return text
@@ -122,7 +126,8 @@ export async function chatWithToolResults(
       .map((p) => p.functionCall);
 
     if (functionCalls.length > 0) {
-      return { functionCalls };
+      const modelContent = response.candidates?.[0]?.content;
+      return { functionCalls, modelContent: modelContent ?? undefined };
     }
 
     return { text: response.text() };

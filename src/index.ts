@@ -1,0 +1,57 @@
+import { bot } from "./bot.js";
+import { log } from "./logger.js";
+
+// ── Banner ──────────────────────────────────────────────
+
+console.log(`
+   ⚡ G R A V I T Y   C L A W ⚡
+   ─────────────────────────────
+   Personal AI Agent · Level 1
+   Telegram + Gemini · Secure
+   ─────────────────────────────
+`);
+
+// ── Start Bot ───────────────────────────────────────────
+
+async function main() {
+  log.info("Starting Gravity Claw...");
+
+  // grammY long-polling — no webhook, no exposed port
+  bot.start({
+    onStart: (botInfo) => {
+      log.info(
+        { username: botInfo.username, id: botInfo.id },
+        `✅ Bot online as @${botInfo.username}`
+      );
+    },
+    drop_pending_updates: true,
+  });
+}
+
+// ── Graceful Shutdown ───────────────────────────────────
+
+function shutdown(signal: string) {
+  log.info({ signal }, "Shutting down...");
+  bot.stop();
+  process.exit(0);
+}
+
+process.on("SIGINT", () => shutdown("SIGINT"));
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+
+// Handle uncaught errors (don't crash on a single failed message)
+process.on("unhandledRejection", (err) => {
+  log.error({ err }, "Unhandled rejection");
+});
+
+process.on("uncaughtException", (err) => {
+  log.fatal({ err }, "Uncaught exception — shutting down");
+  shutdown("uncaughtException");
+});
+
+// ── Go ──────────────────────────────────────────────────
+
+main().catch((err) => {
+  log.fatal({ err }, "Fatal error during startup");
+  process.exit(1);
+});

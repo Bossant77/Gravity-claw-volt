@@ -1,0 +1,8 @@
+services:
+  gravity-claw:
+    build: .
+    container_name: gravity-claw
+    restart: unless-stopped
+    env_file:
+      - .env
+    # No port mappings — Telegram long-polling = outbound only

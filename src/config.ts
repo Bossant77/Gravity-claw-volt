@@ -47,6 +47,12 @@ export const config = {
   /** Agent's own email identity (optional) */
   agentEmail: process.env.AGENT_EMAIL ?? "",
   agentEmailPassword: process.env.AGENT_EMAIL_PASSWORD ?? "",
+
+  /** Chat ID to send proactive heartbeat messages to */
+  heartbeatChatId: Number(process.env.HEARTBEAT_CHAT_ID || "0") || 0,
+
+  /** Timezone for scheduling (IANA format) */
+  timezone: optional("TIMEZONE", "America/Monterrey"),
 } as const;
 
 // ── Validate ────────────────────────────────────────────

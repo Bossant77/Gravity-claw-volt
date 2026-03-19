@@ -9,14 +9,15 @@ import { registerShellTool } from "./tools/shell.js";
 import { registerFilesTool } from "./tools/files.js";
 import { registerDocumentsTool } from "./tools/documents.js";
 import { registerRemindersTool, setReminderBot, startReminderScheduler } from "./tools/reminders.js";
+import { setHeartbeatBot, startHeartbeats } from "./heartbeat.js";
 
 // ── Banner ──────────────────────────────────────────────
 
 console.log(`
    ⚡ G R A V I T Y   C L A W ⚡
    ─────────────────────────────
-   Personal AI Agent · Level 4
-   Tools + Memory + Voice
+   Personal AI Agent · Level 5
+   Tools + Memory + Voice + 💓
    ─────────────────────────────
 `);
 
@@ -45,6 +46,10 @@ async function main() {
   // Set up reminders
   setReminderBot(bot);
   startReminderScheduler();
+
+  // Set up heartbeats
+  setHeartbeatBot(bot);
+  startHeartbeats();
 
   // grammY long-polling
   bot.start({

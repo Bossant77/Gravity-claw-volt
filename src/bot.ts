@@ -29,13 +29,15 @@ bot.use(async (ctx, next) => {
 bot.command("start", async (ctx) => {
   const tools = getRegisteredTools();
   await ctx.reply(
-    `⚡ *Gravity Claw online \\(Level 4\\)*\n\n` +
+    `⚡ *Gravity Claw online \\(Level 5\\)*\n\n` +
       `I'm your personal AI agent with ${tools.length} tools\\.\n` +
       `Send me a message, voice note, or ask me to use my tools\\.\n\n` +
       `Commands:\n` +
       `/clear — reset conversation memory\n` +
       `/ping — check if I'm alive\n` +
-      `/tools — list available tools`,
+      `/tools — list available tools\n` +
+      `/status — server health\n` +
+      `/heartbeat — heartbeat info`,
     { parse_mode: "MarkdownV2" }
   );
 });
@@ -57,6 +59,23 @@ bot.command("tools", async (ctx) => {
   await ctx.reply(
     `🛠️ Available tools (${tools.length}):\n\n` +
       tools.map((t) => `• ${t}`).join("\n")
+  );
+});
+
+bot.command("status", async (ctx) => {
+  const { getHealthStatus } = await import("./heartbeat.js");
+  const status = await getHealthStatus();
+  await ctx.reply(status);
+});
+
+bot.command("heartbeat", async (ctx) => {
+  await ctx.reply(
+    `💓 **Heartbeats activos:**\n\n` +
+      `🌅 Buenos días — 8:00 AM\n` +
+      `🖥️ Health check — cada 6 horas (alerta si crítico)\n` +
+      `📊 Resumen del día — 10:00 PM\n\n` +
+      `Timezone: ${config.timezone}\n` +
+      `Chat ID: ${config.heartbeatChatId || "⚠️ No configurado"}`
   );
 });
 

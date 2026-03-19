@@ -1,8 +1,31 @@
 services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: gravity-claw-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: gravityclaw
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: gravityclaw
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # No exposed ports — internal Docker network only
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gravityclaw"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   gravity-claw:
     build: .
     container_name: gravity-claw
     restart: unless-stopped
     env_file:
       - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
     # No port mappings — Telegram long-polling = outbound only
+
+volumes:
+  pgdata:

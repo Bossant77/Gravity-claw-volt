@@ -36,14 +36,21 @@ const model = genAI.getGenerativeModel({
  */
 export async function chat(
   history: Content[],
-  userMessage: string
+  userMessage: string,
+  relevantMemories: string[] = []
 ): Promise<string> {
-  log.debug({ userMessageLength: userMessage.length }, "Sending to Gemini");
+  log.debug({ userMessageLength: userMessage.length, memories: relevantMemories.length }, "Sending to Gemini");
+
+  // Build memory context if we have relevant memories
+  let memoryContext = "";
+  if (relevantMemories.length > 0) {
+    memoryContext = `\n\nRelevant memories from past conversations:\n${relevantMemories.map((m, i) => `[${i + 1}] ${m}`).join("\n\n")}`;
+  }
 
   // Build the full contents array: system context + history + new message
   const contents: Content[] = [
-    // Inject system prompt as the first "user" turn
-    { role: "user", parts: [{ text: SYSTEM_PROMPT }] },
+    // Inject system prompt + memory context as the first "user" turn
+    { role: "user", parts: [{ text: SYSTEM_PROMPT + memoryContext }] },
     { role: "model", parts: [{ text: "Understood. I am Gravity Claw. How can I help?" }] },
     // Conversation history
     ...history,

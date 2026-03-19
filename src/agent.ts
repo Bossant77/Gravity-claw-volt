@@ -1,32 +1,35 @@
 import { chat, toGeminiHistory } from "./llm.js";
 import { log } from "./logger.js";
 import { config } from "./config.js";
+import {
+  saveMessage,
+  getRecentMessages,
+  clearMessages,
+  storeMemory,
+  searchMemories,
+} from "./memory.js";
 import type { AgentMessage, AgentResponse } from "./types.js";
-
-// ── In-Memory Conversation Store ────────────────────────
-// Key: Telegram chat ID → message history
-const conversations = new Map<number, AgentMessage[]>();
-
-const MAX_HISTORY = 50; // keep last N messages per chat to bound memory
 
 // ── Agent Loop ──────────────────────────────────────────
 
 /**
  * Process a user message through the agentic loop.
  *
- * Level 1: no tools registered, so the loop is a single pass —
- * send to LLM, get text back. The loop structure is here so
- * Levels 2–5 can plug in tools without refactoring.
+ * Level 2: conversation history is loaded from PostgreSQL,
+ * and semantic memories are injected as context.
  */
 export async function runAgent(
   chatId: number,
   userMessage: string
 ): Promise<AgentResponse> {
-  // Retrieve or initialize conversation history
-  let history = conversations.get(chatId) ?? [];
+  // Save user message to database
+  await saveMessage(chatId, "user", userMessage);
 
-  // Add user message
-  history.push({ role: "user", content: userMessage });
+  // Load recent conversation history from PostgreSQL
+  const history = await getRecentMessages(chatId, 50);
+
+  // Search semantic memories for relevant context
+  const relevantMemories = await searchMemories(chatId, userMessage, 5);
 
   let iterations = 0;
   let finalText = "";
@@ -42,38 +45,27 @@ export async function runAgent(
     const geminiHistory = toGeminiHistory(pastMessages);
     const lastUserMsg = history[history.length - 1]!.content;
 
-    // Call LLM
-    const response = await chat(geminiHistory, lastUserMsg);
+    // Call LLM (with semantic context if available)
+    const response = await chat(geminiHistory, lastUserMsg, relevantMemories);
 
-    // Level 1: no tool calls possible, so we always get text back
+    // Level 2: no tool calls, just text back
     finalText = response;
 
-    // Add assistant response to history
-    history.push({ role: "assistant", content: response });
+    // Save assistant response to database
+    await saveMessage(chatId, "assistant", response);
 
-    // No tool calls → loop ends after 1 iteration in Level 1
+    // Store this exchange as a semantic memory (async, non-blocking)
+    const memoryContent = `User: ${userMessage}\nAssistant: ${response}`;
+    storeMemory(chatId, memoryContent).catch(() => {});
+
+    // No tool calls → loop ends after 1 iteration
     break;
-
-    // ── Future: Level 4 will add tool-call detection here ──
-    // if (response.toolCalls) {
-    //   for (const call of response.toolCalls) {
-    //     const result = await executeToolCall(call);
-    //     history.push({ role: "tool", content: result, toolCallId: call.id });
-    //   }
-    //   continue; // re-enter loop so LLM sees tool results
-    // }
   }
 
   if (iterations >= config.maxIterations) {
     log.warn({ chatId, iterations }, "Agent loop hit max iterations");
     finalText += "\n\n⚠️ _Reached maximum processing steps._";
   }
-
-  // Trim history to prevent unbounded growth
-  if (history.length > MAX_HISTORY) {
-    history = history.slice(-MAX_HISTORY);
-  }
-  conversations.set(chatId, history);
 
   log.info({ chatId, iterations }, "Agent loop completed");
   return { text: finalText, iterations };
@@ -82,7 +74,7 @@ export async function runAgent(
 /**
  * Clear conversation history for a chat.
  */
-export function clearHistory(chatId: number): void {
-  conversations.delete(chatId);
+export async function clearHistory(chatId: number): Promise<void> {
+  await clearMessages(chatId);
   log.info({ chatId }, "Conversation history cleared");
 }

@@ -28,6 +28,9 @@ export const config = {
   /** Google AI Studio API key */
   geminiApiKey: required("GEMINI_API_KEY"),
 
+  /** PostgreSQL connection string */
+  databaseUrl: required("DATABASE_URL"),
+
   /** Gemini model name */
   geminiModel: optional("GEMINI_MODEL", "gemini-3-flash-preview"),
 

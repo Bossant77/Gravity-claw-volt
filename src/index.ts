@@ -1,13 +1,14 @@
 import { bot } from "./bot.js";
 import { log } from "./logger.js";
+import { initDatabase, shutdown as dbShutdown } from "./db.js";
 
 // ── Banner ──────────────────────────────────────────────
 
 console.log(`
    ⚡ G R A V I T Y   C L A W ⚡
    ─────────────────────────────
-   Personal AI Agent · Level 1
-   Telegram + Gemini · Secure
+   Personal AI Agent · Level 2
+   Telegram + Gemini + Memory
    ─────────────────────────────
 `);
 
@@ -15,6 +16,9 @@ console.log(`
 
 async function main() {
   log.info("Starting Gravity Claw...");
+
+  // Initialize database (creates tables if needed)
+  await initDatabase();
 
   // grammY long-polling — no webhook, no exposed port
   bot.start({
@@ -30,9 +34,10 @@ async function main() {
 
 // ── Graceful Shutdown ───────────────────────────────────
 
-function shutdown(signal: string) {
+async function shutdown(signal: string) {
   log.info({ signal }, "Shutting down...");
   bot.stop();
+  await dbShutdown();
   process.exit(0);
 }
 

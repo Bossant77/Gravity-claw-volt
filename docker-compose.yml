@@ -25,6 +25,9 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     # No port mappings — Telegram long-polling = outbound only
 
 volumes:

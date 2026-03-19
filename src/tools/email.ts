@@ -42,8 +42,8 @@ export function registerEmailTool(): void {
       try {
         const transporter = nodemailer.createTransport({
           host: "smtp.gmail.com",
-          port: 465,
-          secure: true,
+          port: 587,
+          secure: false,
           auth: {
             user: config.agentEmail,
             pass: config.agentEmailPassword,

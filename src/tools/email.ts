@@ -41,11 +41,16 @@ export function registerEmailTool(): void {
 
       try {
         const transporter = nodemailer.createTransport({
-          service: "gmail",
+          host: "smtp.gmail.com",
+          port: 465,
+          secure: true,
           auth: {
             user: config.agentEmail,
             pass: config.agentEmailPassword,
           },
+          connectionTimeout: 30_000,
+          greetingTimeout: 30_000,
+          socketTimeout: 30_000,
         });
 
         await transporter.sendMail({

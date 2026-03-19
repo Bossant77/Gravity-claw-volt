@@ -48,6 +48,19 @@ const SCHEMA_SQL = `
   -- Index for fast vector similarity search
   CREATE INDEX IF NOT EXISTS idx_memories_chat_id
     ON memories (chat_id);
+
+  -- Reminders (scheduled messages)
+  CREATE TABLE IF NOT EXISTS reminders (
+    id          SERIAL PRIMARY KEY,
+    chat_id     BIGINT       NOT NULL,
+    message     TEXT         NOT NULL,
+    due_at      TIMESTAMPTZ  NOT NULL,
+    delivered   BOOLEAN      NOT NULL DEFAULT false,
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_reminders_due
+    ON reminders (due_at) WHERE delivered = false;
 `;
 
 // ── Public API ──────────────────────────────────────────

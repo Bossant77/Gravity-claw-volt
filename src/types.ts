@@ -52,4 +52,10 @@ export interface AgentResponse {
   text: string;
   /** How many loop iterations it took */
   iterations: number;
+  /** Optional files to send to the user */
+  files?: Array<{
+    buffer: Buffer;
+    filename: string;
+    mimeType: string;
+  }>;
 }

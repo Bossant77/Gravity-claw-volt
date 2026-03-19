@@ -1,28 +1,33 @@
-# ── Build Stage ───────────────────────────────────────────
-FROM node:20-alpine AS builder
+FROM node:20-slim
+
+# Install system dependencies for Puppeteer + LibreOffice + PDF tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    chromium \
+    libreoffice-core \
+    libreoffice-writer \
+    poppler-utils \
+    fonts-liberation \
+    fonts-noto \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Tell Puppeteer to use system Chromium
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+ENV CHROME_BIN=/usr/bin/chromium
+
+# Create workspace for file operations
+RUN mkdir -p /home/claw/workspace && chmod 777 /home/claw/workspace
 
 WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN npm ci
+
+# Install dependencies
+COPY package*.json ./
+RUN npm ci --omit=dev
+
+# Copy source and build
 COPY tsconfig.json ./
-COPY src/ ./src/
+COPY src/ src/
 RUN npm run build
-
-# ── Runtime Stage ────────────────────────────────────────
-FROM node:20-alpine AS runtime
-
-WORKDIR /app
-
-# Non-root user for security
-RUN addgroup -S claw && adduser -S claw -G claw
-
-COPY package.json package-lock.json* ./
-RUN npm ci --omit=dev && npm cache clean --force
-
-COPY --from=builder /app/dist ./dist
-
-USER claw
-
-# No EXPOSE — we use Telegram long-polling (outbound only)
 
 CMD ["node", "dist/index.js"]

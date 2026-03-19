@@ -43,6 +43,10 @@ export const config = {
     | "info"
     | "warn"
     | "error",
+
+  /** Agent's own email identity (optional) */
+  agentEmail: process.env.AGENT_EMAIL ?? "",
+  agentEmailPassword: process.env.AGENT_EMAIL_PASSWORD ?? "",
 } as const;
 
 // ── Validate ────────────────────────────────────────────

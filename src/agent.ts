@@ -82,6 +82,7 @@ export async function runAgent(
         functionResponseParts.push({
           functionResponse: {
             name: fc.name,
+            id: (fc as unknown as Record<string, unknown>).id as string | undefined,
             response: { result: toolOutput.result },
           },
         });

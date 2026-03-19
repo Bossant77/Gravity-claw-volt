@@ -106,4 +106,51 @@ export function registerFilesTool(): void {
       }
     },
   });
+
+  registerTool({
+    name: "send_file",
+    description:
+      "Send a file from the workspace to the user via Telegram. Use this whenever the user asks you to send, return, or share a file.",
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        path: {
+          type: SchemaType.STRING,
+          description: "Relative path to the file in the workspace",
+        },
+      },
+      required: ["path"],
+    },
+    handler: async (args) => {
+      const target = safePath(String(args.path));
+
+      try {
+        const buffer = await fs.readFile(target);
+        const filename = path.basename(target);
+        const ext = path.extname(filename).toLowerCase();
+
+        // Determine MIME type
+        const mimeMap: Record<string, string> = {
+          ".pdf": "application/pdf",
+          ".png": "image/png",
+          ".jpg": "image/jpeg",
+          ".jpeg": "image/jpeg",
+          ".gif": "image/gif",
+          ".txt": "text/plain",
+          ".csv": "text/csv",
+          ".json": "application/json",
+          ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        };
+        const mimeType = mimeMap[ext] ?? "application/octet-stream";
+
+        return {
+          result: `Sending file: ${filename} (${Math.round(buffer.length / 1024)}KB)`,
+          file: { buffer: Buffer.from(buffer), filename, mimeType },
+        };
+      } catch {
+        return { result: `File not found: ${args.path}` };
+      }
+    },
+  });
 }

@@ -6,7 +6,7 @@ RUN npm install -g @google/gemini-cli @openai/codex 2>/dev/null || true
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci
+RUN npm install
 
 COPY tsconfig.json ./
 COPY src/ src/

@@ -30,5 +30,15 @@ services:
       - 8.8.4.4
     # No port mappings — Telegram long-polling = outbound only
 
+  gemini-bridge:
+    build: ./gemini-bridge
+    container_name: gemini-bridge
+    restart: unless-stopped
+    env_file:
+      - ./gemini-bridge/.env
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+
 volumes:
   pgdata:

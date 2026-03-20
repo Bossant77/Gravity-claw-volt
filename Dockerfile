@@ -9,7 +9,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-liberation \
     fonts-noto \
     ca-certificates \
+    git \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Gemini CLI and Codex CLI globally
+RUN npm install -g @google/gemini-cli @openai/codex
 
 # Tell Puppeteer to use system Chromium
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true

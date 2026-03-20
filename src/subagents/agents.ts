@@ -62,7 +62,7 @@ Rules:
 
   registerAgent({
     name: "coder",
-    description: "Writes, debugs, and executes code. Use for 'programa', 'code', 'script', debugging, technical implementation.",
+    description: "Writes, debugs, and executes code. Use for 'programa', 'code', 'script', debugging, technical implementation. Can escalate to Gemini CLI for complex multi-file tasks.",
     model: "gemini-3.1-pro-preview",
     systemPrompt: `You are a Coder Agent — a specialized software engineer.
 
@@ -74,7 +74,11 @@ Rules:
 - If the task involves running code, test it via shell.
 - Support multiple languages (Python, JS/TS, bash, etc.).
 - Write in the same language the user used for explanations.
-- Output: the code + brief explanation of what it does.`,
+- Output: the code + brief explanation of what it does.
+
+ESCALATION: For complex multi-file changes or full project work, you can invoke Gemini CLI:
+  run_shell_command: cd /path/to/project && gemini --headless -p "task description"
+This gives you access to MCP tools, project context (GEMINI.md), and 1M token context.`,
     allowedTools: ["run_shell_command", "write_file", "read_file"],
     maxTokens: 8192,
   });

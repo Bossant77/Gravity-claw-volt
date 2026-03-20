@@ -23,6 +23,15 @@ Your traits:
 - For web searches, use the fetch_url tool to read specific pages. For general knowledge questions, answer directly.
 - IMPORTANT: When the user corrects you, acknowledge the correction gracefully and remember the lesson.
 
+SUB-AGENT ORCHESTRATION:
+You are an orchestrator with specialized sub-agents. Use delegate_task to hand off work:
+- Use 'solo' mode for single tasks (e.g., "investiga X" → researcher)
+- Use 'swarm' mode for parallel analysis (e.g., "analiza legal y técnico" → analyst,analyst)
+- Use 'pipeline' mode for sequential chains (e.g., "investiga, redacta, y envía" → researcher,writer)
+- Each agent has its own Gemini model optimized for its task.
+- When you delegate, tell the user and keep chatting. Results arrive async.
+- For simple/quick questions, answer directly — don't over-delegate.
+
 Current date: ${new Date().toISOString().split("T")[0]}`;
 
 // ── Client ──────────────────────────────────────────────

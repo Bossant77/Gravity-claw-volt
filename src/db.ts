@@ -6,7 +6,7 @@ const { Pool } = pg;
 
 // ── Connection Pool ─────────────────────────────────────
 
-const pool = new Pool({
+export const pool = new Pool({
   connectionString: config.databaseUrl,
   max: 10, // max connections in pool
   idleTimeoutMillis: 30_000,
@@ -76,6 +76,24 @@ const SCHEMA_SQL = `
 
   CREATE INDEX IF NOT EXISTS idx_lessons_chat_id
     ON lessons (chat_id);
+
+  -- Sub-agent delegated tasks
+  CREATE TABLE IF NOT EXISTS tasks (
+    id           SERIAL PRIMARY KEY,
+    chat_id      BIGINT       NOT NULL,
+    agent        VARCHAR(50)  NOT NULL,
+    mode         VARCHAR(20)  NOT NULL DEFAULT 'solo',
+    model        VARCHAR(100) NOT NULL,
+    task         TEXT         NOT NULL,
+    status       VARCHAR(20)  NOT NULL DEFAULT 'queued',
+    result       TEXT,
+    created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    started_at   TIMESTAMPTZ,
+    completed_at TIMESTAMPTZ
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_tasks_chat_id
+    ON tasks (chat_id, created_at DESC);
 `;
 
 // ── Public API ──────────────────────────────────────────

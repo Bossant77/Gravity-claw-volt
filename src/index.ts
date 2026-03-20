@@ -1,5 +1,6 @@
 import { bot } from "./bot.js";
 import { log } from "./logger.js";
+import { config } from "./config.js";
 import { initDatabase, shutdown as dbShutdown } from "./db.js";
 
 // Import tool registrations
@@ -15,6 +16,9 @@ import { setHeartbeatBot, startHeartbeats } from "./heartbeat.js";
 import { registerAllAgents } from "./subagents/agents.js";
 import { setSubAgentBot } from "./subagents/runner.js";
 import { initMcp, shutdownMcp } from "./mcp/client.js";
+import { initGmailClients } from "./gmail/client.js";
+import { registerGmailTools } from "./gmail/tools.js";
+import { setGmailNotificationBot, startGmailNotifications, stopGmailNotifications } from "./gmail/notifications.js";
 
 // ── Banner ──────────────────────────────────────────────
 
@@ -53,6 +57,10 @@ async function main() {
   // Register all tools
   registerAllTools();
 
+  // Initialize Gmail API (multi-account)
+  initGmailClients();
+  registerGmailTools();
+
   // Initialize MCP servers (discovers and registers external tools)
   await initMcp();
 
@@ -66,6 +74,12 @@ async function main() {
 
   // Set up sub-agent bot reference (for async result delivery)
   setSubAgentBot(bot);
+
+  // Set up Gmail notifications
+  if (config.heartbeatChatId) {
+    setGmailNotificationBot(bot, config.heartbeatChatId);
+    startGmailNotifications();
+  }
 
   // grammY long-polling
   bot.start({
@@ -84,6 +98,7 @@ async function main() {
 async function shutdown(signal: string) {
   log.info({ signal }, "Shutting down...");
   bot.stop();
+  stopGmailNotifications();
   await shutdownMcp();
   await dbShutdown();
   process.exit(0);

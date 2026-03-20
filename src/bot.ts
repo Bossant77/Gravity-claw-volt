@@ -4,6 +4,7 @@ import { log } from "./logger.js";
 import { runAgent, runVoiceAgent, clearHistory } from "./agent.js";
 import { downloadTelegramFile } from "./voice.js";
 import { getRegisteredTools } from "./tools/registry.js";
+import { pool } from "./db.js";
 
 // ── Bot Instance ────────────────────────────────────────
 
@@ -29,13 +30,14 @@ bot.use(async (ctx, next) => {
 bot.command("start", async (ctx) => {
   const tools = getRegisteredTools();
   await ctx.reply(
-    `⚡ *Gravity Claw online \\(Level 5\\)*\n\n` +
-      `I'm your personal AI agent with ${tools.length} tools\\.\n` +
+    `⚡ *Gravity Claw online \\(Level 7\\)*\n\n` +
+      `I'm your personal AI agent with ${tools.length} tools and multi\\-model sub\\-agents\\.\n` +
       `Send me a message, voice note, or ask me to use my tools\\.\n\n` +
       `Commands:\n` +
       `/clear — reset conversation memory\n` +
       `/ping — check if I'm alive\n` +
       `/tools — list available tools\n` +
+      `/tasks — sub\\-agent task status\n` +
       `/status — server health\n` +
       `/heartbeat — heartbeat info`,
     { parse_mode: "MarkdownV2" }
@@ -77,6 +79,43 @@ bot.command("heartbeat", async (ctx) => {
       `Timezone: ${config.timezone}\n` +
       `Chat ID: ${config.heartbeatChatId || "⚠️ No configurado"}`
   );
+});
+
+bot.command("tasks", async (ctx) => {
+  try {
+    const res = await pool.query(
+      `SELECT id, agent, mode, model, status, 
+              LEFT(task, 80) as task_preview,
+              created_at, completed_at
+       FROM tasks 
+       WHERE chat_id = $1
+       ORDER BY created_at DESC 
+       LIMIT 10`,
+      [ctx.chat.id]
+    );
+
+    if (res.rows.length === 0) {
+      await ctx.reply("📋 No delegated tasks yet. Ask me to investigate or analyze something!");
+      return;
+    }
+
+    const statusEmoji: Record<string, string> = {
+      queued: "⏳",
+      running: "🔄",
+      done: "✅",
+      failed: "❌",
+    };
+
+    const lines = res.rows.map((r) => {
+      const emoji = statusEmoji[r.status as string] ?? "❓";
+      return `${emoji} #${r.id} ${r.agent} (${r.model})\n   ${r.status} | ${r.task_preview}`;
+    });
+
+    await ctx.reply(`📋 Recent sub-agent tasks:\n\n${lines.join("\n\n")}`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await ctx.reply(`⚠️ Error: ${msg}`);
+  }
 });
 
 // ── Message Handler ─────────────────────────────────────

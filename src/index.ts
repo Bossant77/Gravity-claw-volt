@@ -14,14 +14,15 @@ import { registerDelegateTool } from "./tools/delegate.js";
 import { setHeartbeatBot, startHeartbeats } from "./heartbeat.js";
 import { registerAllAgents } from "./subagents/agents.js";
 import { setSubAgentBot } from "./subagents/runner.js";
+import { initMcp, shutdownMcp } from "./mcp/client.js";
 
 // ── Banner ──────────────────────────────────────────────
 
 console.log(`
    ⚡ G R A V I T Y   C L A W ⚡
    ─────────────────────────────
-   Personal AI Agent · Level 7
-   Multi-Model Sub-Agents 🤖
+   Personal AI Agent · Level 8
+   MCP Integrations 🔗
    ─────────────────────────────
 `);
 
@@ -52,6 +53,9 @@ async function main() {
   // Register all tools
   registerAllTools();
 
+  // Initialize MCP servers (discovers and registers external tools)
+  await initMcp();
+
   // Set up reminders
   setReminderBot(bot);
   startReminderScheduler();
@@ -80,6 +84,7 @@ async function main() {
 async function shutdown(signal: string) {
   log.info({ signal }, "Shutting down...");
   bot.stop();
+  await shutdownMcp();
   await dbShutdown();
   process.exit(0);
 }

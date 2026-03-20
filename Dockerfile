@@ -12,8 +12,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Gemini CLI and Codex CLI globally
-RUN npm install -g @google/gemini-cli @openai/codex
+# Install Gemini CLI, Codex CLI, and MCP servers globally
+RUN npm install -g \
+    @google/gemini-cli \
+    @openai/codex \
+    @modelcontextprotocol/server-github \
+    @modelcontextprotocol/server-filesystem \
+    2>/dev/null || true
 
 # Tell Puppeteer to use system Chromium
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true

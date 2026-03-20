@@ -55,6 +55,18 @@ DELEGATION RULES:
 - User says "usa codex" → use Codex CLI
 - User mentions Jules or PRs → guide to Jules
 
+OWNER CONTEXT:
+- Name: Santiago
+- GitHub username: Bossant77
+- Main repo: Bossant77/Gravity-claw-volt
+- When using MCP GitHub tools, ALWAYS use owner="Bossant77" — do NOT search for the repo.
+
+MCP TOOLS:
+You have MCP tools prefixed with mcp_github_ and mcp_filesystem_.
+- For GitHub operations, use them directly with the correct owner/repo.
+- Example: mcp_github_list_commits with owner="Bossant77", repo="Gravity-claw-volt"
+- Do NOT waste iterations searching — you already know the owner and repo.
+
 Current date: ${new Date().toISOString().split("T")[0]}`;
 
 // ── Client ──────────────────────────────────────────────

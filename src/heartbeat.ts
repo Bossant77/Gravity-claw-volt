@@ -3,6 +3,7 @@ import { promisify } from "util";
 import { log } from "./logger.js";
 import { config } from "./config.js";
 import { query } from "./db.js";
+import { getLogTopicThreadId, getGeneralTopicThreadId } from "./topics.js";
 import type { Bot } from "grammy";
 
 const execAsync = promisify(exec);
@@ -35,17 +36,17 @@ async function tick(): Promise<void> {
   const hour = now.getHours();
   const minute = now.getMinutes();
 
-  // Morning greeting — 8:00 AM
+  // Morning greeting — 8:00 AM → General topic
   if (hour === 8 && minute === 0) {
     await morningGreeting();
   }
 
-  // Server health — every 6 hours (0:00, 6:00, 12:00, 18:00)
+  // Server health — every 6 hours (0:00, 6:00, 12:00, 18:00) → logs y memoria topic
   if (hour % 6 === 0 && minute === 0) {
     await serverHealthCheck();
   }
 
-  // Daily summary — 10:00 PM
+  // Daily summary — 10:00 PM → logs y memoria topic
   if (hour === 22 && minute === 0) {
     await dailySummary();
   }
@@ -56,6 +57,9 @@ async function tick(): Promise<void> {
 async function morningGreeting(): Promise<void> {
   const chatId = config.heartbeatChatId;
   if (!chatId || !botRef) return;
+
+  // Route to General topic
+  const threadId = getGeneralTopicThreadId();
 
   const greetings = [
     "☀️ Buenos días, Santiago. ¿En qué te ayudo hoy?",
@@ -68,8 +72,8 @@ async function morningGreeting(): Promise<void> {
   const msg = greetings[Math.floor(Math.random() * greetings.length)];
 
   try {
-    await botRef.api.sendMessage(chatId, msg);
-    log.info("💓 Morning greeting sent");
+    await botRef.api.sendMessage(chatId, msg, threadId ? { message_thread_id: threadId } : {});
+    log.info({ threadId }, "💓 Morning greeting sent");
   } catch (err) {
     log.error({ err }, "Failed to send morning greeting");
   }
@@ -78,6 +82,9 @@ async function morningGreeting(): Promise<void> {
 async function serverHealthCheck(): Promise<void> {
   const chatId = config.heartbeatChatId;
   if (!chatId || !botRef) return;
+
+  // Route to logs y memoria topic
+  const threadId = getLogTopicThreadId();
 
   try {
     const health = await getServerHealth();
@@ -100,8 +107,8 @@ async function serverHealthCheck(): Promise<void> {
     // Only send message if there are alerts
     if (alerts.length > 0) {
       const msg = `🖥️ **Health Alert**\n\n${alerts.join("\n")}\n\nUptime: ${health.uptime}`;
-      await botRef.api.sendMessage(chatId, msg);
-      log.info({ alerts: alerts.length }, "💓 Health alert sent");
+      await botRef.api.sendMessage(chatId, msg, threadId ? { message_thread_id: threadId } : {});
+      log.info({ alerts: alerts.length, threadId }, "💓 Health alert sent");
     } else {
       log.debug("💓 Health check OK — no alerts");
     }
@@ -114,8 +121,11 @@ async function dailySummary(): Promise<void> {
   const chatId = config.heartbeatChatId;
   if (!chatId || !botRef) return;
 
+  // Route to logs y memoria topic
+  const threadId = getLogTopicThreadId();
+
   try {
-    // Count today's messages
+    // Count today's messages (across all topics)
     const msgResult = await query<{ count: string }>(
       `SELECT COUNT(*) as count FROM messages
        WHERE chat_id = $1 AND created_at > NOW() - INTERVAL '24 hours'`,
@@ -142,8 +152,8 @@ async function dailySummary(): Promise<void> {
       `⏱️ Uptime: ${health.uptime}\n\n` +
       `Buenas noches, Santiago. 🌙`;
 
-    await botRef.api.sendMessage(chatId, msg);
-    log.info("💓 Daily summary sent");
+    await botRef.api.sendMessage(chatId, msg, threadId ? { message_thread_id: threadId } : {});
+    log.info({ threadId }, "💓 Daily summary sent");
   } catch (err) {
     log.error({ err }, "Failed to send daily summary");
   }

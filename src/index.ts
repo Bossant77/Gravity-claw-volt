@@ -10,6 +10,7 @@ import { registerShellTool } from "./tools/shell.js";
 import { registerFilesTool } from "./tools/files.js";
 import { registerDocumentsTool } from "./tools/documents.js";
 import { registerRemindersTool, setReminderBot, startReminderScheduler } from "./tools/reminders.js";
+import { registerCronJobsTool, setCronJobBot, startCronScheduler } from "./tools/cronjobs.js";
 import { registerEmailTool } from "./tools/email.js";
 import { registerDelegateTool } from "./tools/delegate.js";
 import { setHeartbeatBot, startHeartbeats } from "./heartbeat.js";
@@ -40,6 +41,7 @@ function registerAllTools() {
   registerDocumentsTool();
   registerRemindersTool();
   registerEmailTool();
+  registerCronJobsTool();
 
   // Sub-agents must be registered before delegate tool
   registerAllAgents();
@@ -67,6 +69,10 @@ async function main() {
   // Set up reminders
   setReminderBot(bot);
   startReminderScheduler();
+
+  // Set up cron jobs
+  setCronJobBot(bot);
+  startCronScheduler();
 
   // Set up heartbeats
   setHeartbeatBot(bot);

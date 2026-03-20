@@ -96,7 +96,8 @@ export async function chat(
   history: Content[],
   userMessage: string,
   relevantMemories: string[] = [],
-  relevantLessons: string[] = []
+  relevantLessons: string[] = [],
+  topicContext?: string
 ): Promise<LLMResponse> {
   log.debug({ userMessageLength: userMessage.length, memories: relevantMemories.length, lessons: relevantLessons.length }, "Sending to Gemini");
 
@@ -110,8 +111,15 @@ export async function chat(
 
   const toolDeclarations = getToolDeclarations();
 
+  // Build the full system prompt with optional topic context
+  let fullSystemPrompt = SYSTEM_PROMPT;
+  if (topicContext) {
+    fullSystemPrompt += `\n\n${topicContext}`;
+  }
+  fullSystemPrompt += memoryContext;
+
   const contents: Content[] = [
-    { role: "user", parts: [{ text: SYSTEM_PROMPT + memoryContext }] },
+    { role: "user", parts: [{ text: fullSystemPrompt }] },
     { role: "model", parts: [{ text: "Understood. I am Gravity Claw, ready with tools and my learned lessons. How can I help?" }] },
     ...history,
     { role: "user", parts: [{ text: userMessage }] },
@@ -194,7 +202,8 @@ export async function chatWithAudio(
   history: Content[],
   audioBuffer: Buffer,
   mimeType: string,
-  relevantMemories: string[] = []
+  relevantMemories: string[] = [],
+  topicContext?: string
 ): Promise<string> {
   log.debug({ audioSizeKB: Math.round(audioBuffer.length / 1024), mimeType }, "Sending audio to Gemini");
 
@@ -205,8 +214,14 @@ export async function chatWithAudio(
 
   const audioPrompt = `The user sent a voice message. First, understand what they said. Then respond naturally to their message. If the audio is unclear, ask for clarification.`;
 
+  let fullSystemPrompt = SYSTEM_PROMPT;
+  if (topicContext) {
+    fullSystemPrompt += `\n\n${topicContext}`;
+  }
+  fullSystemPrompt += memoryContext;
+
   const contents: Content[] = [
-    { role: "user", parts: [{ text: SYSTEM_PROMPT + memoryContext }] },
+    { role: "user", parts: [{ text: fullSystemPrompt }] },
     { role: "model", parts: [{ text: "Understood. I am Gravity Claw. How can I help?" }] },
     ...history,
     {

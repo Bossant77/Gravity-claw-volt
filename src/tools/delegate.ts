@@ -32,6 +32,7 @@ export function registerDelegateTool(): void {
       const task = String(args.task);
       const mode = String(args.mode || "solo");
       const chatId = Number(args.__chatId || 0);
+      const threadId = (args as Record<string, unknown>).__threadId as number | undefined;
 
       try {
         if (mode === "swarm") {
@@ -78,6 +79,7 @@ export function registerDelegateTool(): void {
     handler: async (args) => {
       const count = Math.min(Number(args.count) || 5, 10);
       const chatId = Number(args.__chatId || 0);
+      const threadId = (args as Record<string, unknown>).__threadId ?? null;
 
       try {
         const res = await pool.query(
@@ -85,10 +87,10 @@ export function registerDelegateTool(): void {
                   created_at, completed_at,
                   LEFT(result, 200) as result_preview
            FROM tasks 
-           WHERE chat_id = $1
+           WHERE chat_id = $1 AND thread_id IS NOT DISTINCT FROM $2
            ORDER BY created_at DESC 
-           LIMIT $2`,
-          [chatId, count]
+           LIMIT $3`,
+          [chatId, threadId, count]
         );
 
         if (res.rows.length === 0) {

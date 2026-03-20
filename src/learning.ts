@@ -5,37 +5,39 @@ import { embedText } from "./memory.js";
 // ── Self-Learning System ────────────────────────────────
 
 /**
- * Store a lesson learned from user corrections.
+ * Store a lesson learned from user corrections (thread-scoped).
  */
 export async function storeLesson(
   chatId: number,
   context: string,
   correction: string,
-  lesson: string
+  lesson: string,
+  threadId?: number
 ): Promise<void> {
   try {
     const embedding = await embedText(lesson);
     const vectorStr = `[${embedding.join(",")}]`;
 
     await query(
-      `INSERT INTO lessons (chat_id, context, correction, lesson, embedding)
-       VALUES ($1, $2, $3, $4, $5::vector)`,
-      [chatId, context, correction, lesson, vectorStr]
+      `INSERT INTO lessons (chat_id, thread_id, context, correction, lesson, embedding)
+       VALUES ($1, $2, $3, $4, $5, $6::vector)`,
+      [chatId, threadId ?? null, context, correction, lesson, vectorStr]
     );
 
-    log.info({ chatId }, "Lesson stored");
+    log.info({ chatId, threadId }, "Lesson stored");
   } catch (err) {
     log.error({ err }, "Failed to store lesson");
   }
 }
 
 /**
- * Find lessons relevant to the current query.
+ * Find lessons relevant to the current query (thread-scoped).
  */
 export async function findRelevantLessons(
   chatId: number,
   queryText: string,
-  limit = 3
+  limit = 3,
+  threadId?: number
 ): Promise<string[]> {
   try {
     const embedding = await embedText(queryText);
@@ -44,10 +46,10 @@ export async function findRelevantLessons(
     const result = await query<{ lesson: string; similarity: number }>(
       `SELECT lesson, 1 - (embedding <=> $1::vector) AS similarity
        FROM lessons
-       WHERE chat_id = $2
+       WHERE chat_id = $2 AND thread_id IS NOT DISTINCT FROM $3
        ORDER BY embedding <=> $1::vector
-       LIMIT $3`,
-      [vectorStr, chatId, limit]
+       LIMIT $4`,
+      [vectorStr, chatId, threadId ?? null, limit]
     );
 
     return result.rows

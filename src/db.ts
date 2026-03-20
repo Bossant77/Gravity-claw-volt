@@ -27,12 +27,13 @@ const SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS messages (
     id          SERIAL PRIMARY KEY,
     chat_id     BIGINT       NOT NULL,
+    thread_id   BIGINT,
     role        VARCHAR(20)  NOT NULL,
     content     TEXT         NOT NULL,
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
   );
 
-  -- Index for fast lookups by chat
+  -- Index for fast lookups by chat + topic
   CREATE INDEX IF NOT EXISTS idx_messages_chat_id
     ON messages (chat_id, created_at DESC);
 
@@ -41,6 +42,7 @@ const SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS memories (
     id          SERIAL PRIMARY KEY,
     chat_id     BIGINT       NOT NULL,
+    thread_id   BIGINT,
     content     TEXT         NOT NULL,
     embedding   vector(3072) NOT NULL,
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
@@ -54,6 +56,7 @@ const SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS reminders (
     id          SERIAL PRIMARY KEY,
     chat_id     BIGINT       NOT NULL,
+    thread_id   BIGINT,
     message     TEXT         NOT NULL,
     due_at      TIMESTAMPTZ  NOT NULL,
     delivered   BOOLEAN      NOT NULL DEFAULT false,
@@ -67,6 +70,7 @@ const SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS lessons (
     id          SERIAL PRIMARY KEY,
     chat_id     BIGINT        NOT NULL,
+    thread_id   BIGINT,
     context     TEXT          NOT NULL,
     correction  TEXT          NOT NULL,
     lesson      TEXT          NOT NULL,
@@ -81,6 +85,7 @@ const SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS tasks (
     id           SERIAL PRIMARY KEY,
     chat_id      BIGINT       NOT NULL,
+    thread_id    BIGINT,
     agent        VARCHAR(50)  NOT NULL,
     mode         VARCHAR(20)  NOT NULL DEFAULT 'solo',
     model        VARCHAR(100) NOT NULL,
@@ -94,6 +99,41 @@ const SCHEMA_SQL = `
 
   CREATE INDEX IF NOT EXISTS idx_tasks_chat_id
     ON tasks (chat_id, created_at DESC);
+
+  -- Cron jobs (recurring scheduled tasks)
+  CREATE TABLE IF NOT EXISTS cron_jobs (
+    id          SERIAL PRIMARY KEY,
+    chat_id     BIGINT       NOT NULL,
+    thread_id   BIGINT,
+    name        VARCHAR(100) NOT NULL,
+    cron_expr   VARCHAR(50)  NOT NULL,
+    message     TEXT         NOT NULL,
+    enabled     BOOLEAN      NOT NULL DEFAULT true,
+    last_run    TIMESTAMPTZ,
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_cron_jobs_enabled
+    ON cron_jobs (enabled) WHERE enabled = true;
+`;
+
+// Migration for existing databases — adds thread_id to tables that don't have it yet
+const MIGRATION_SQL = `
+  ALTER TABLE messages ADD COLUMN IF NOT EXISTS thread_id BIGINT;
+  ALTER TABLE memories ADD COLUMN IF NOT EXISTS thread_id BIGINT;
+  ALTER TABLE reminders ADD COLUMN IF NOT EXISTS thread_id BIGINT;
+  ALTER TABLE lessons ADD COLUMN IF NOT EXISTS thread_id BIGINT;
+  ALTER TABLE tasks ADD COLUMN IF NOT EXISTS thread_id BIGINT;
+
+  -- Composite index for topic-scoped queries
+  CREATE INDEX IF NOT EXISTS idx_messages_chat_thread
+    ON messages (chat_id, thread_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_memories_chat_thread
+    ON memories (chat_id, thread_id);
+  CREATE INDEX IF NOT EXISTS idx_lessons_chat_thread
+    ON lessons (chat_id, thread_id);
+  CREATE INDEX IF NOT EXISTS idx_tasks_chat_thread
+    ON tasks (chat_id, thread_id, created_at DESC);
 `;
 
 // ── Public API ──────────────────────────────────────────
@@ -107,6 +147,7 @@ export async function initDatabase(): Promise<void> {
 
   try {
     await pool.query(SCHEMA_SQL);
+    await pool.query(MIGRATION_SQL);
     log.info("✅ Database initialized successfully");
   } catch (err) {
     log.fatal({ err }, "Failed to initialize database");

@@ -24,11 +24,17 @@ export function startReminderScheduler(): void {
       const result = await query<{
         id: number;
         chat_id: string;
+        thread_id: number | null;
         message: string;
       }>(
-        `SELECT id, chat_id, message FROM reminders
+        `SELECT id, chat_id, thread_id, message FROM reminders
          WHERE due_at <= NOW() AND delivered = false`,
         []
+      );
+
+      log.debug(
+        { pendingCount: result.rows.length },
+        "⏰ Reminder scheduler tick"
       );
 
       for (const row of result.rows) {
@@ -36,10 +42,11 @@ export function startReminderScheduler(): void {
           try {
             await botRef.api.sendMessage(
               Number(row.chat_id),
-              `⏰ **Reminder:**\n${row.message}`
+              `⏰ **Reminder:**\n${row.message}`,
+              row.thread_id ? { message_thread_id: row.thread_id } : {}
             );
             await query("UPDATE reminders SET delivered = true WHERE id = $1", [row.id]);
-            log.info({ reminderId: row.id }, "Reminder delivered");
+            log.info({ reminderId: row.id, threadId: row.thread_id }, "Reminder delivered");
           } catch (err) {
             log.error({ err, reminderId: row.id }, "Failed to deliver reminder");
           }
@@ -78,13 +85,14 @@ export function registerRemindersTool(): void {
         return { result: "Error: minutes_from_now must be a positive number" };
       }
 
-      // Use context chatId which will be injected
+      // Use context chatId and threadId which will be injected
       const chatId = (args as Record<string, unknown>).__chatId ?? 0;
+      const threadId = (args as Record<string, unknown>).__threadId ?? null;
 
       await query(
-        `INSERT INTO reminders (chat_id, message, due_at, delivered)
-         VALUES ($1, $2, NOW() + INTERVAL '1 minute' * $3, false)`,
-        [chatId, message, minutes]
+        `INSERT INTO reminders (chat_id, thread_id, message, due_at, delivered)
+         VALUES ($1, $2, $3, NOW() + INTERVAL '1 minute' * $4, false)`,
+        [chatId, threadId, message, minutes]
       );
 
       const dueTime = new Date(Date.now() + minutes * 60_000);

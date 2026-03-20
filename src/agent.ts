@@ -10,6 +10,7 @@ import {
 } from "./memory.js";
 import { isCorrection, extractLesson, storeLesson, findRelevantLessons } from "./learning.js";
 import { executeTool } from "./tools/registry.js";
+import { getTopicConfig } from "./topics.js";
 import type { AgentMessage, AgentResponse } from "./types.js";
 import type { Content } from "@google/generative-ai";
 import type { ToolOutput } from "./tools/registry.js";
@@ -21,16 +22,23 @@ import type { ToolOutput } from "./tools/registry.js";
  *
  * Level 4: Full tool-calling loop. Gemini can call tools,
  * see results, and iterate before giving the final response.
+ *
+ * @param threadId - Telegram forum topic thread ID (for topic-scoped context)
  */
 export async function runAgent(
   chatId: number,
-  userMessage: string
+  userMessage: string,
+  threadId?: number
 ): Promise<AgentResponse> {
-  await saveMessage(chatId, "user", userMessage);
+  await saveMessage(chatId, "user", userMessage, threadId);
 
-  const history = await getRecentMessages(chatId, 50);
-  const relevantMemories = await searchMemories(chatId, userMessage, 5);
-  const relevantLessons = await findRelevantLessons(chatId, userMessage, 3);
+  const history = await getRecentMessages(chatId, 50, threadId);
+  const relevantMemories = await searchMemories(chatId, userMessage, 5, threadId);
+  const relevantLessons = await findRelevantLessons(chatId, userMessage, 3, threadId);
+
+  // Get topic-specific system prompt override
+  const topicConfig = getTopicConfig(threadId);
+  const topicContext = topicConfig?.systemPromptOverride;
 
   // Build initial Gemini history
   const pastMessages = history.slice(0, -1).filter(
@@ -39,8 +47,8 @@ export async function runAgent(
   );
   const geminiHistory = toGeminiHistory(pastMessages);
 
-  // First LLM call
-  let response = await chat(geminiHistory, userMessage, relevantMemories, relevantLessons);
+  // First LLM call (with topic context)
+  let response = await chat(geminiHistory, userMessage, relevantMemories, relevantLessons, topicContext);
 
   // Build conversation contents for multi-turn tool calling
   let memoryContext = "";
@@ -51,8 +59,15 @@ export async function runAgent(
     memoryContext += `\n\nLessons I've learned from past corrections (apply these!):\n${relevantLessons.map((l, i) => `[Lesson ${i + 1}] ${l}`).join("\n\n")}`;
   }
 
+  // Build the full system prompt (with topic context for multi-turn)
+  let fullSystemPrompt = SYSTEM_PROMPT;
+  if (topicContext) {
+    fullSystemPrompt += `\n\n${topicContext}`;
+  }
+  fullSystemPrompt += memoryContext;
+
   const conversationContents: Content[] = [
-    { role: "user", parts: [{ text: SYSTEM_PROMPT + memoryContext }] },
+    { role: "user", parts: [{ text: fullSystemPrompt }] },
     { role: "model", parts: [{ text: "Understood. I am Gravity Claw, ready with tools and my learned lessons. How can I help?" }] },
     ...geminiHistory,
     { role: "user", parts: [{ text: userMessage }] },
@@ -80,8 +95,8 @@ export async function runAgent(
       // Execute each function call
       const functionResponseParts = [];
       for (const fc of response.functionCalls) {
-        // Inject chatId for tools that need it (reminders)
-        const argsWithContext = { ...fc.args, __chatId: chatId };
+        // Inject chatId and threadId for tools that need them (reminders, etc.)
+        const argsWithContext = { ...fc.args, __chatId: chatId, __threadId: threadId };
         const toolOutput = await executeTool(fc.name, argsWithContext);
 
         functionResponseParts.push({
@@ -114,27 +129,27 @@ export async function runAgent(
   }
 
   if (iterations >= config.maxIterations) {
-    log.warn({ chatId, iterations }, "Agent loop hit max iterations");
+    log.warn({ chatId, threadId, iterations }, "Agent loop hit max iterations");
     finalText += "\n\n⚠️ _Reached maximum processing steps._";
   }
 
-  // Save response
-  await saveMessage(chatId, "assistant", finalText);
+  // Save response (thread-scoped)
+  await saveMessage(chatId, "assistant", finalText, threadId);
 
   const memoryContent = `User: ${userMessage}\nAssistant: ${finalText}`;
-  storeMemory(chatId, memoryContent).catch(() => {});
+  storeMemory(chatId, memoryContent, threadId).catch(() => {});
 
-  // Self-learning: detect corrections and store lessons
+  // Self-learning: detect corrections and store lessons (thread-scoped)
   if (isCorrection(userMessage) && history.length > 1) {
     const lastAssistantMsg = history.filter((m) => m.role === "assistant").pop();
     if (lastAssistantMsg) {
       const lesson = await extractLesson(lastAssistantMsg.content, userMessage);
-      storeLesson(chatId, lastAssistantMsg.content, userMessage, lesson).catch(() => {});
-      log.info({ chatId }, "Self-learning: lesson extracted from correction");
+      storeLesson(chatId, lastAssistantMsg.content, userMessage, lesson, threadId).catch(() => {});
+      log.info({ chatId, threadId }, "Self-learning: lesson extracted from correction");
     }
   }
 
-  log.info({ chatId, iterations, toolsUsed: iterations - 1 }, "Agent loop completed");
+  log.info({ chatId, threadId, iterations, toolsUsed: iterations - 1 }, "Agent loop completed");
   return { text: finalText, iterations, files: files.filter((f): f is NonNullable<typeof f> => !!f) };
 }
 
@@ -144,12 +159,17 @@ export async function runAgent(
 export async function runVoiceAgent(
   chatId: number,
   audioBuffer: Buffer,
-  mimeType: string
+  mimeType: string,
+  threadId?: number
 ): Promise<AgentResponse> {
-  await saveMessage(chatId, "user", "[🎙️ Voice message]");
+  await saveMessage(chatId, "user", "[🎙️ Voice message]", threadId);
 
-  const history = await getRecentMessages(chatId, 50);
-  const relevantMemories = await searchMemories(chatId, "voice message", 3);
+  const history = await getRecentMessages(chatId, 50, threadId);
+  const relevantMemories = await searchMemories(chatId, "voice message", 3, threadId);
+
+  // Get topic-specific system prompt override
+  const topicConfig = getTopicConfig(threadId);
+  const topicContext = topicConfig?.systemPromptOverride;
 
   const pastMessages = history.slice(0, -1).filter(
     (m): m is AgentMessage & { role: "user" | "assistant" } =>
@@ -157,21 +177,21 @@ export async function runVoiceAgent(
   );
   const geminiHistory = toGeminiHistory(pastMessages);
 
-  const responseText = await chatWithAudio(geminiHistory, audioBuffer, mimeType, relevantMemories);
+  const responseText = await chatWithAudio(geminiHistory, audioBuffer, mimeType, relevantMemories, topicContext);
 
-  await saveMessage(chatId, "assistant", responseText);
+  await saveMessage(chatId, "assistant", responseText, threadId);
 
   const memoryContent = `User: [voice message]\nAssistant: ${responseText}`;
-  storeMemory(chatId, memoryContent).catch(() => {});
+  storeMemory(chatId, memoryContent, threadId).catch(() => {});
 
-  log.info({ chatId }, "Voice agent completed");
+  log.info({ chatId, threadId }, "Voice agent completed");
   return { text: responseText, iterations: 1 };
 }
 
 /**
- * Clear conversation history for a chat.
+ * Clear conversation history for a chat (thread-scoped).
  */
-export async function clearHistory(chatId: number): Promise<void> {
-  await clearMessages(chatId);
-  log.info({ chatId }, "Conversation history cleared");
+export async function clearHistory(chatId: number, threadId?: number): Promise<void> {
+  await clearMessages(chatId, threadId);
+  log.info({ chatId, threadId }, "Conversation history cleared");
 }

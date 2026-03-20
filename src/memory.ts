@@ -25,6 +25,16 @@ export async function embedText(text: string): Promise<number[]> {
   }
 }
 
+// ── Thread-scoped query helper ──────────────────────────
+
+/**
+ * Build a WHERE clause fragment that matches chat_id and optionally thread_id.
+ * Uses IS NOT DISTINCT FROM to correctly handle NULL thread_id values.
+ */
+function threadFilter(paramOffset: number): string {
+  return `chat_id = $${paramOffset} AND thread_id IS NOT DISTINCT FROM $${paramOffset + 1}`;
+}
+
 // ── Conversation Memory (Messages) ──────────────────────
 
 /**
@@ -33,27 +43,29 @@ export async function embedText(text: string): Promise<number[]> {
 export async function saveMessage(
   chatId: number,
   role: string,
-  content: string
+  content: string,
+  threadId?: number
 ): Promise<void> {
   await query(
-    "INSERT INTO messages (chat_id, role, content) VALUES ($1, $2, $3)",
-    [chatId, role, content]
+    "INSERT INTO messages (chat_id, thread_id, role, content) VALUES ($1, $2, $3, $4)",
+    [chatId, threadId ?? null, role, content]
   );
 }
 
 /**
- * Load the most recent messages for a chat.
+ * Load the most recent messages for a chat (thread-scoped).
  */
 export async function getRecentMessages(
   chatId: number,
-  limit = 50
+  limit = 50,
+  threadId?: number
 ): Promise<AgentMessage[]> {
   const result = await query<{ role: string; content: string }>(
     `SELECT role, content FROM messages
-     WHERE chat_id = $1
+     WHERE ${threadFilter(1)}
      ORDER BY created_at DESC
-     LIMIT $2`,
-    [chatId, limit]
+     LIMIT $3`,
+    [chatId, threadId ?? null, limit]
   );
 
   // Reverse to get chronological order (oldest first)
@@ -64,33 +76,40 @@ export async function getRecentMessages(
 }
 
 /**
- * Delete all messages for a chat.
+ * Delete all messages for a chat (thread-scoped).
  */
-export async function clearMessages(chatId: number): Promise<void> {
-  await query("DELETE FROM messages WHERE chat_id = $1", [chatId]);
-  await query("DELETE FROM memories WHERE chat_id = $1", [chatId]);
-  log.info({ chatId }, "Cleared messages and memories");
+export async function clearMessages(chatId: number, threadId?: number): Promise<void> {
+  await query(
+    `DELETE FROM messages WHERE ${threadFilter(1)}`,
+    [chatId, threadId ?? null]
+  );
+  await query(
+    `DELETE FROM memories WHERE ${threadFilter(1)}`,
+    [chatId, threadId ?? null]
+  );
+  log.info({ chatId, threadId }, "Cleared messages and memories");
 }
 
 // ── Semantic Memory (Embeddings) ────────────────────────
 
 /**
- * Store a semantic memory with its embedding.
+ * Store a semantic memory with its embedding (thread-scoped).
  */
 export async function storeMemory(
   chatId: number,
-  content: string
+  content: string,
+  threadId?: number
 ): Promise<void> {
   try {
     const embedding = await embedText(content);
     const vectorStr = `[${embedding.join(",")}]`;
 
     await query(
-      "INSERT INTO memories (chat_id, content, embedding) VALUES ($1, $2, $3::vector)",
-      [chatId, content, vectorStr]
+      "INSERT INTO memories (chat_id, thread_id, content, embedding) VALUES ($1, $2, $3, $4::vector)",
+      [chatId, threadId ?? null, content, vectorStr]
     );
 
-    log.debug({ chatId, contentLength: content.length }, "Stored semantic memory");
+    log.debug({ chatId, threadId, contentLength: content.length }, "Stored semantic memory");
   } catch (err) {
     // Non-fatal — don't crash the bot if embedding fails
     log.error({ err }, "Failed to store semantic memory");
@@ -98,13 +117,14 @@ export async function storeMemory(
 }
 
 /**
- * Search memories by cosine similarity to the query text.
+ * Search memories by cosine similarity to the query text (thread-scoped).
  * Returns the top `limit` most relevant memories.
  */
 export async function searchMemories(
   chatId: number,
   queryText: string,
-  limit = 5
+  limit = 5,
+  threadId?: number
 ): Promise<string[]> {
   try {
     const embedding = await embedText(queryText);
@@ -113,10 +133,10 @@ export async function searchMemories(
     const result = await query<{ content: string; similarity: number }>(
       `SELECT content, 1 - (embedding <=> $1::vector) AS similarity
        FROM memories
-       WHERE chat_id = $2
+       WHERE ${threadFilter(2)}
        ORDER BY embedding <=> $1::vector
-       LIMIT $3`,
-      [vectorStr, chatId, limit]
+       LIMIT $4`,
+      [vectorStr, chatId, threadId ?? null, limit]
     );
 
     return result.rows

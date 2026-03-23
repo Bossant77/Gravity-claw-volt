@@ -30,29 +30,8 @@ export function setGmailNotificationBot(b: Bot, targetChatId: number): void {
  * Start polling for new emails across all accounts.
  */
 export function startGmailNotifications(intervalMs: number = 60_000): void {
-  if (!bot || chatId === 0) {
-    log.warn("Gmail notifications not started — bot or chatId not set");
-    return;
-  }
-
-  const accounts = getInitializedAccounts();
-  if (accounts.length === 0) return;
-
-  // Initialize history IDs
-  for (const account of accounts) {
-    initHistoryId(account);
-  }
-
-  pollInterval = setInterval(async () => {
-    for (const account of accounts) {
-      await checkNewEmails(account);
-    }
-  }, intervalMs);
-
-  log.info(
-    { accounts: accounts.length, intervalMs },
-    "📬 Gmail notification polling started"
-  );
+  log.info("Gmail proactive notifications are OFF by absolute silence policy.");
+  return;
 }
 
 /**

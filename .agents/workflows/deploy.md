@@ -30,7 +30,7 @@ git push origin main
 
 ## 5. SSH into VPS and deploy
 ```
-ssh molt_user@5.78.95.218 "cd ~/gravity-claw; git pull origin main; docker compose up -d --build"
+ssh molt_user@91.99.225.220 "cd ~/gravity-claw; git pull origin main; docker compose up -d --build"
 ```
 This will:
 - Pull latest code from GitHub
@@ -39,7 +39,7 @@ This will:
 
 ## 6. Verify deployment
 ```
-ssh molt_user@5.78.95.218 "docker compose -f ~/gravity-claw/docker-compose.yml logs --tail=20"
+ssh molt_user@91.99.225.220 "docker compose -f ~/gravity-claw/docker-compose.yml logs --tail=20"
 ```
 Check the last 20 log lines to confirm the bot started successfully. Look for:
 - "✅ Database initialized successfully"

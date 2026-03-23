@@ -1,6 +1,6 @@
 FROM node:20-slim
 
-# Install system dependencies for Puppeteer + LibreOffice + PDF tools
+# Install system dependencies for Puppeteer + LibreOffice + PDF tools + SSH
 RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium \
     libreoffice-core \
@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-noto \
     ca-certificates \
     git \
+    openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Gemini CLI, Codex CLI, and MCP servers globally
@@ -30,7 +31,7 @@ RUN mkdir -p /home/claw/workspace && chmod 777 /home/claw/workspace
 
 WORKDIR /app
 
-# Install ALL dependencies (including dev for build)
+# Install ALL dependencies (including dev — TypeScript needed at runtime for self-edit sandbox)
 COPY package*.json ./
 RUN npm ci
 
@@ -39,7 +40,8 @@ COPY tsconfig.json ./
 COPY src/ src/
 RUN npm run build
 
-# Remove dev dependencies after build
-RUN npm prune --omit=dev
+# NOTE: We keep devDependencies (especially TypeScript) for runtime self-edit
+# compilation checks via `tsc --noEmit`. The ~20MB overhead is worth the
+# ability for Volt to validate code changes in a sandbox before applying them.
 
 CMD ["node", "dist/index.js"]

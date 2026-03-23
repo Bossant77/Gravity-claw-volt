@@ -28,6 +28,9 @@ services:
     dns:
       - 8.8.8.8
       - 8.8.4.4
+    volumes:
+      - workspace:/home/claw/workspace        # Persistent workspace (brain files + cloned repo)
+      - ~/.ssh:/root/.ssh:ro                   # SSH keys for git push & VPS deploy
     # No port mappings — Telegram long-polling = outbound only
 
   gemini-bridge:
@@ -42,3 +45,4 @@ services:
 
 volumes:
   pgdata:
+  workspace:

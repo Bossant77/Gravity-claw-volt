@@ -14,6 +14,7 @@ import { registerCronJobsTool, setCronJobBot, startCronScheduler } from "./tools
 import { registerEmailTool } from "./tools/email.js";
 import { registerDelegateTool } from "./tools/delegate.js";
 import { registerSelfTools } from "./tools/self.js";
+import { registerCodeEditTools } from "./tools/code-edit.js";
 import { setHeartbeatBot, startHeartbeats } from "./heartbeat.js";
 import { registerAllAgents } from "./subagents/agents.js";
 import { setSubAgentBot } from "./subagents/runner.js";
@@ -44,6 +45,7 @@ function registerAllTools() {
   registerEmailTool();
   registerCronJobsTool();
   registerSelfTools();  // 🧠 Self-evolution tools
+  registerCodeEditTools();  // 🔧 Code self-edit tools
 
   // Sub-agents must be registered before delegate tool
   registerAllAgents();

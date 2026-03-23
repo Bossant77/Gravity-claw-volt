@@ -53,6 +53,18 @@ export const config = {
 
   /** Timezone for scheduling (IANA format) */
   timezone: optional("TIMEZONE", "America/Monterrey"),
+
+  /** Code self-edit feature flag */
+  codeEditEnabled: optional("CODE_EDIT_ENABLED", "true") === "true",
+
+  /** Git config for self-edit commits */
+  gitRepoUrl: optional("GIT_REPO_URL", "git@github.com:Bossant77/Gravity-claw-volt.git"),
+  gitUserName: optional("GIT_USER_NAME", "Volt ⚡"),
+  gitUserEmail: optional("GIT_USER_EMAIL", "volt@gravityclaw.ai"),
+
+  /** VPS SSH config for code_deploy */
+  vpsSshHost: optional("VPS_SSH_HOST", "91.99.225.220"),
+  vpsSshUser: optional("VPS_SSH_USER", "molt_user"),
 } as const;
 
 // ── Validate ────────────────────────────────────────────

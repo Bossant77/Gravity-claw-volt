@@ -9,6 +9,7 @@ import { log } from "../logger.js";
 import { getAgent, type SubAgentConfig } from "./registry.js";
 import { executeTool, getToolDeclarations } from "../tools/registry.js";
 import { pool } from "../db.js";
+import { formatDirectivesForPrompt } from "../directives.js";
 import type { Bot } from "grammy";
 import type { FunctionDeclaration } from "@google/generative-ai";
 
@@ -48,9 +49,13 @@ async function executeAgent(
     ? allTools.filter((t) => agentConfig.allowedTools.includes(t.name))
     : [];
 
-  // Isolated context — fresh conversation (no parent history)
+  // Load directives for sub-agent context (behavioral rules apply to all agents)
+  const directivesBlock = await formatDirectivesForPrompt().catch(() => "");
+  const enrichedPrompt = agentConfig.systemPrompt + directivesBlock;
+
+  // Isolated context — fresh conversation (no parent history) but with directives
   const contents: Content[] = [
-    { role: "user", parts: [{ text: agentConfig.systemPrompt }] },
+    { role: "user", parts: [{ text: enrichedPrompt }] },
     { role: "model", parts: [{ text: `Understood. I am the ${agentConfig.name} agent, ready to work.` }] },
     { role: "user", parts: [{ text: `Task: ${task}` }] },
   ];

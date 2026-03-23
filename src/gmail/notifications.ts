@@ -1,5 +1,6 @@
 import { log } from "../logger.js";
 import type { Bot } from "grammy";
+import { getDirective } from "../directives.js";
 import {
   getInitializedAccounts,
   getGmailClient,
@@ -90,6 +91,16 @@ async function checkNewEmails(accountName: GmailAccountName): Promise<void> {
   const gmail = getGmailClient(accountName);
   const lastHistoryId = lastHistoryIds.get(accountName);
   if (!gmail || !lastHistoryId || !bot || chatId === 0) return;
+
+  // Check if email notifications are disabled via directive
+  try {
+    const directive = await getDirective("email_notifications");
+    if (directive?.active && directive.content.toLowerCase().includes("disabled")) {
+      return; // Notifications disabled by directive — skip silently
+    }
+  } catch {
+    // If directive check fails, proceed with notifications as normal
+  }
 
   try {
     const history = await gmail.users.history.list({

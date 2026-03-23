@@ -6,6 +6,8 @@ import { downloadTelegramFile } from "./voice.js";
 import { getRegisteredTools } from "./tools/registry.js";
 import { pool } from "./db.js";
 import { getTopicConfig } from "./topics.js";
+import { getActiveDirectives } from "./directives.js";
+import * as fs from "fs/promises";
 
 // ── Bot Instance ────────────────────────────────────────
 
@@ -106,6 +108,62 @@ bot.command("status", async (ctx) => {
   const { getHealthStatus } = await import("./heartbeat.js");
   const status = await getHealthStatus();
   await replyInThread(ctx, status, threadId);
+});
+
+bot.command("directives", async (ctx) => {
+  const threadId = getThreadId(ctx);
+  try {
+    const directives = await getActiveDirectives();
+    if (directives.length === 0) {
+      await replyInThread(ctx, "🧠 No active directives yet. Teach me something!", threadId);
+      return;
+    }
+
+    const grouped = new Map<string, typeof directives>();
+    for (const d of directives) {
+      const list = grouped.get(d.category) ?? [];
+      list.push(d);
+      grouped.set(d.category, list);
+    }
+
+    let msg = `🧠 **Active Directives** (${directives.length})\n\n`;
+    for (const [category, dirs] of grouped) {
+      msg += `**[${category.toUpperCase()}]**\n`;
+      for (const d of dirs) {
+        msg += `• \`${d.key}\`: ${d.content} _(${d.source})_\n`;
+      }
+      msg += "\n";
+    }
+
+    await replyInThread(ctx, msg.trim(), threadId);
+  } catch (err) {
+    await replyInThread(ctx, "❌ Failed to load directives.", threadId);
+  }
+});
+
+bot.command("brain", async (ctx) => {
+  const threadId = getThreadId(ctx);
+  const brainDir = "/home/claw/workspace/brain";
+  const files = ["soul.md", "skills.md", "notes.md"];
+
+  let msg = "🧠 **Brain Files**\n\n";
+  for (const file of files) {
+    try {
+      const content = await fs.readFile(`${brainDir}/${file}`, "utf-8");
+      const lines = content.split("\n").length;
+      const size = content.length;
+      msg += `📄 **${file}** — ${lines} lines, ${size} chars\n`;
+    } catch {
+      msg += `📄 **${file}** — not created yet\n`;
+    }
+  }
+
+  try {
+    const directives = await getActiveDirectives();
+    msg += `\n🔧 Active directives: ${directives.length}`;
+  } catch { /* ignore */ }
+
+  await replyInThread(ctx, msg.trim(), threadId);
 });
 
 bot.command("heartbeat", async (ctx) => {

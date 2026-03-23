@@ -4,6 +4,7 @@ import { log } from "./logger.js";
 import { config } from "./config.js";
 import { query } from "./db.js";
 import { getLogTopicThreadId, getGeneralTopicThreadId } from "./topics.js";
+import { getActiveDirectives } from "./directives.js";
 import type { Bot } from "grammy";
 
 const execAsync = promisify(exec);
@@ -144,10 +145,24 @@ async function dailySummary(): Promise<void> {
     // Server health
     const health = await getServerHealth();
 
+    // Evolution stats — directives learned
+    let directiveStats = "";
+    try {
+      const directives = await getActiveDirectives();
+      const newToday = await query<{ count: string }>(
+        `SELECT COUNT(*) as count FROM directives
+         WHERE active = true AND updated_at > NOW() - INTERVAL '24 hours'`,
+        []
+      );
+      const newCount = parseInt(newToday.rows[0]?.count ?? "0", 10);
+      directiveStats = `🧠 Directives: ${directives.length} active (${newCount} new today)\n`;
+    } catch { /* ignore if directives table doesn't exist yet */ }
+
     const msg =
       `📊 **Resumen del día**\n\n` +
       `💬 Mensajes intercambiados: ${messageCount}\n` +
       `⏰ Recordatorios entregados: ${reminderCount}\n` +
+      directiveStats +
       `🖥️ Server: disco ${health.diskUsedPercent}%, RAM ${health.memUsedPercent}%\n` +
       `⏱️ Uptime: ${health.uptime}\n\n` +
       `Buenas noches, Santiago. 🌙`;

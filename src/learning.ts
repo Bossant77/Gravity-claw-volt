@@ -64,18 +64,34 @@ export async function findRelevantLessons(
 // ── Correction Detection ────────────────────────────────
 
 const CORRECTION_PATTERNS = [
+  // Spanish corrections
   /no,?\s*(me refiero|quise decir|quiero decir|meant)/i,
   /est[áa]s?\s*(mal|equivocad|incorrecto)/i,
   /eso no\s*(es|está)/i,
-  /that'?s?\s*(wrong|incorrect|not right)/i,
-  /actually,?\s*(I meant|it'?s)/i,
-  /corrección|correction/i,
   /no\s*era?\s*(eso|así)/i,
   /te equivocas/i,
+  /corrección|correction/i,
+  // English corrections
+  /that'?s?\s*(wrong|incorrect|not right)/i,
+  /actually,?\s*(I meant|it'?s)/i,
+  // Behavioral instructions (these should also trigger directive creation)
+  /a partir de ahora/i,
+  /de ahora en adelante/i,
+  /nunca\s+(más\s+)?(me |lo |la |les |hagas|vuelvas|envíes|mandes)/i,
+  /siempre\s+(que|debes|tienes|haz)/i,
+  /deja\s+de/i,
+  /no\s+(me\s+)?(hagas|envíes|mandes|notifiques|avises)/i,
+  /no\s+quiero\s+que/i,
+  /para\s+de|detén|detente/i,
+  /from now on/i,
+  /stop\s+(doing|sending|notifying)/i,
+  /don'?t\s+ever/i,
+  /never\s+(again|do|send|notify)/i,
+  /always\s+(do|use|respond|answer)/i,
 ];
 
 /**
- * Check if a user message looks like a correction.
+ * Check if a user message looks like a correction or behavioral instruction.
  */
 export function isCorrection(text: string): boolean {
   return CORRECTION_PATTERNS.some((p) => p.test(text));
@@ -83,12 +99,15 @@ export function isCorrection(text: string): boolean {
 
 /**
  * Extract a lesson from a correction exchange.
- * Uses the LLM to summarize what was learned.
+ * Uses structured format for better retrieval.
  */
 export async function extractLesson(
   previousResponse: string,
   userCorrection: string
 ): Promise<string> {
-  // Simple extraction — the correction itself is the lesson
-  return `When I said "${previousResponse.slice(0, 200)}", the user corrected: "${userCorrection.slice(0, 300)}". I should remember this for future reference.`;
+  // Build a structured lesson that's easy to retrieve and apply
+  const prevTruncated = previousResponse.slice(0, 300).replace(/\n/g, " ");
+  const corrTruncated = userCorrection.slice(0, 400).replace(/\n/g, " ");
+
+  return `CORRECTION: My response "${prevTruncated}" was wrong/unwanted. User said: "${corrTruncated}". RULE: ${corrTruncated}`;
 }

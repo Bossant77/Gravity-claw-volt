@@ -11,17 +11,46 @@ import {
 import { isCorrection, extractLesson, storeLesson, findRelevantLessons } from "./learning.js";
 import { executeTool } from "./tools/registry.js";
 import { getTopicConfig } from "./topics.js";
+import { formatDirectivesForPrompt } from "./directives.js";
 import type { AgentMessage, AgentResponse } from "./types.js";
 import type { Content } from "@google/generative-ai";
 import type { ToolOutput } from "./tools/registry.js";
+
+// ── Retry Helpers ───────────────────────────────────────
+
+const MAX_RETRIES = 3;
+const RETRY_DELAYS = [1000, 2000, 4000]; // Exponential backoff in ms
+
+/**
+ * Sleep for a given number of milliseconds.
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Check if an error is transient (worth retrying).
+ */
+function isTransientError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return (
+    msg.includes("429") || // Rate limit
+    msg.includes("503") || // Service unavailable
+    msg.includes("500") || // Internal server error
+    msg.includes("ECONNRESET") ||
+    msg.includes("ETIMEDOUT") ||
+    msg.includes("timeout") ||
+    msg.includes("overloaded")
+  );
+}
 
 // ── Agent Loop ──────────────────────────────────────────
 
 /**
  * Process a user message through the agentic loop.
  *
- * Level 4: Full tool-calling loop. Gemini can call tools,
- * see results, and iterate before giving the final response.
+ * Level 4: Full tool-calling loop with retry, fallback, and directives.
+ * Gemini can call tools, see results, and iterate before giving the final response.
  *
  * @param threadId - Telegram forum topic thread ID (for topic-scoped context)
  */
@@ -36,6 +65,9 @@ export async function runAgent(
   const relevantMemories = await searchMemories(chatId, userMessage, 5, threadId);
   const relevantLessons = await findRelevantLessons(chatId, userMessage, 3, threadId);
 
+  // Load active directives for dynamic injection
+  const directivesBlock = await formatDirectivesForPrompt().catch(() => "");
+
   // Get topic-specific system prompt override
   const topicConfig = getTopicConfig(threadId);
   const topicContext = topicConfig?.systemPromptOverride;
@@ -47,8 +79,10 @@ export async function runAgent(
   );
   const geminiHistory = toGeminiHistory(pastMessages);
 
-  // First LLM call (with topic context)
-  let response = await chat(geminiHistory, userMessage, relevantMemories, relevantLessons, topicContext);
+  // First LLM call (with directives + topic context) — with retry
+  let response = await callWithRetry(() =>
+    chat(geminiHistory, userMessage, relevantMemories, relevantLessons, topicContext, directivesBlock)
+  );
 
   // Build conversation contents for multi-turn tool calling
   let memoryContext = "";
@@ -59,8 +93,11 @@ export async function runAgent(
     memoryContext += `\n\nLessons I've learned from past corrections (apply these!):\n${relevantLessons.map((l, i) => `[Lesson ${i + 1}] ${l}`).join("\n\n")}`;
   }
 
-  // Build the full system prompt (with topic context for multi-turn)
+  // Build the full system prompt (with directives + topic context for multi-turn)
   let fullSystemPrompt = SYSTEM_PROMPT;
+  if (directivesBlock) {
+    fullSystemPrompt += directivesBlock;
+  }
   if (topicContext) {
     fullSystemPrompt += `\n\n${topicContext}`;
   }
@@ -97,7 +134,18 @@ export async function runAgent(
       for (const fc of response.functionCalls) {
         // Inject chatId and threadId for tools that need them (reminders, etc.)
         const argsWithContext = { ...fc.args, __chatId: chatId, __threadId: threadId };
-        const toolOutput = await executeTool(fc.name, argsWithContext);
+
+        let toolOutput: ToolOutput;
+        try {
+          toolOutput = await executeTool(fc.name, argsWithContext);
+        } catch (toolErr) {
+          // Structured error feedback — let LLM reason about the failure
+          const errMsg = toolErr instanceof Error ? toolErr.message : String(toolErr);
+          log.warn({ tool: fc.name, err: errMsg }, "Tool execution failed — sending error to LLM");
+          toolOutput = {
+            result: `⚠️ Tool "${fc.name}" failed: ${errMsg}. Consider retrying with different parameters or using an alternative tool.`,
+          };
+        }
 
         functionResponseParts.push({
           functionResponse: {
@@ -119,8 +167,8 @@ export async function runAgent(
         parts: functionResponseParts,
       });
 
-      // Call Gemini again with tool results
-      response = await chatWithToolResults(conversationContents);
+      // Call Gemini again with tool results — with retry
+      response = await callWithRetry(() => chatWithToolResults(conversationContents));
     } else {
       // No text and no function calls — shouldn't happen
       finalText = "I processed your request but couldn't generate a response.";
@@ -153,6 +201,34 @@ export async function runAgent(
   return { text: finalText, iterations, files: files.filter((f): f is NonNullable<typeof f> => !!f) };
 }
 
+// ── Retry Wrapper ───────────────────────────────────────
+
+/**
+ * Call a function with exponential backoff retry on transient errors.
+ */
+async function callWithRetry<T>(fn: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (attempt < MAX_RETRIES && isTransientError(err)) {
+        const delay = RETRY_DELAYS[attempt] ?? 4000;
+        log.warn(
+          { attempt: attempt + 1, maxRetries: MAX_RETRIES, delayMs: delay },
+          "Transient error — retrying..."
+        );
+        await sleep(delay);
+        continue;
+      }
+      // Non-transient or exhausted retries
+      throw err;
+    }
+  }
+  throw new Error("Retry logic bug — should not reach here");
+}
+
+// ── Voice Agent ─────────────────────────────────────────
+
 /**
  * Process a voice message through the agent.
  */
@@ -167,6 +243,9 @@ export async function runVoiceAgent(
   const history = await getRecentMessages(chatId, 50, threadId);
   const relevantMemories = await searchMemories(chatId, "voice message", 3, threadId);
 
+  // Load directives for voice responses too
+  const directivesBlock = await formatDirectivesForPrompt().catch(() => "");
+
   // Get topic-specific system prompt override
   const topicConfig = getTopicConfig(threadId);
   const topicContext = topicConfig?.systemPromptOverride;
@@ -177,7 +256,9 @@ export async function runVoiceAgent(
   );
   const geminiHistory = toGeminiHistory(pastMessages);
 
-  const responseText = await chatWithAudio(geminiHistory, audioBuffer, mimeType, relevantMemories, topicContext);
+  const responseText = await callWithRetry(() =>
+    chatWithAudio(geminiHistory, audioBuffer, mimeType, relevantMemories, topicContext)
+  );
 
   await saveMessage(chatId, "assistant", responseText, threadId);
 

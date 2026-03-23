@@ -115,6 +115,21 @@ const SCHEMA_SQL = `
 
   CREATE INDEX IF NOT EXISTS idx_cron_jobs_enabled
     ON cron_jobs (enabled) WHERE enabled = true;
+
+  -- Directives (persistent behavioral rules — self-evolution DNA)
+  CREATE TABLE IF NOT EXISTS directives (
+    id          SERIAL PRIMARY KEY,
+    category    VARCHAR(50)  NOT NULL DEFAULT 'behavior',
+    key         VARCHAR(100) UNIQUE NOT NULL,
+    content     TEXT         NOT NULL,
+    source      VARCHAR(20)  NOT NULL DEFAULT 'user',
+    active      BOOLEAN      NOT NULL DEFAULT true,
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_directives_active
+    ON directives (active) WHERE active = true;
 `;
 
 // Migration for existing databases — adds thread_id to tables that don't have it yet
@@ -124,6 +139,10 @@ const MIGRATION_SQL = `
   ALTER TABLE reminders ADD COLUMN IF NOT EXISTS thread_id BIGINT;
   ALTER TABLE lessons ADD COLUMN IF NOT EXISTS thread_id BIGINT;
   ALTER TABLE tasks ADD COLUMN IF NOT EXISTS thread_id BIGINT;
+
+  -- Typed memory columns (Mem0-inspired)
+  ALTER TABLE memories ADD COLUMN IF NOT EXISTS memory_type VARCHAR(30) DEFAULT 'general';
+  ALTER TABLE memories ADD COLUMN IF NOT EXISTS importance INTEGER DEFAULT 5;
 
   -- Composite index for topic-scoped queries
   CREATE INDEX IF NOT EXISTS idx_messages_chat_thread

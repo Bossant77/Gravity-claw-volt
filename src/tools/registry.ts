@@ -56,13 +56,33 @@ export async function executeTool(
 ): Promise<ToolOutput> {
   const tool = tools.get(name);
   if (!tool) {
-    return { result: `Error: Unknown tool "${name}"` };
+    return { result: `Error: Unknown tool "${name}". Available tools: ${Array.from(tools.keys()).join(", ")}` };
+  }
+
+  // Validate required parameters
+  if (tool.parameters && "required" in tool.parameters && Array.isArray(tool.parameters.required)) {
+    const missing = tool.parameters.required.filter(
+      (param: string) => args[param] === undefined || args[param] === null || args[param] === ""
+    );
+    if (missing.length > 0) {
+      return {
+        result: `Error: Missing required parameters for "${name}": ${missing.join(", ")}. Please provide all required arguments.`,
+      };
+    }
   }
 
   log.info({ tool: name, args }, "Executing tool");
 
   try {
     const output = await tool.handler(args);
+
+    // Handle empty results — guide LLM to try alternatives
+    if (!output.result || output.result.trim() === "") {
+      return {
+        result: `Tool "${name}" executed successfully but returned no output. Consider trying a different approach or checking if the input was correct.`,
+      };
+    }
+
     log.info({ tool: name, resultLength: output.result.length }, "Tool completed");
     return output;
   } catch (err) {

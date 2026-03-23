@@ -13,6 +13,7 @@ import { registerRemindersTool, setReminderBot, startReminderScheduler } from ".
 import { registerCronJobsTool, setCronJobBot, startCronScheduler } from "./tools/cronjobs.js";
 import { registerEmailTool } from "./tools/email.js";
 import { registerDelegateTool } from "./tools/delegate.js";
+import { registerSelfTools } from "./tools/self.js";
 import { setHeartbeatBot, startHeartbeats } from "./heartbeat.js";
 import { registerAllAgents } from "./subagents/agents.js";
 import { setSubAgentBot } from "./subagents/runner.js";
@@ -26,8 +27,8 @@ import { setGmailNotificationBot, startGmailNotifications, stopGmailNotification
 console.log(`
    ⚡ G R A V I T Y   C L A W ⚡
    ─────────────────────────────
-   Personal AI Agent · Level 8
-   MCP Integrations 🔗
+   Personal AI Agent · Level 9
+   Self-Evolution 🧠 · MCP 🔗
    ─────────────────────────────
 `);
 
@@ -42,6 +43,7 @@ function registerAllTools() {
   registerRemindersTool();
   registerEmailTool();
   registerCronJobsTool();
+  registerSelfTools();  // 🧠 Self-evolution tools
 
   // Sub-agents must be registered before delegate tool
   registerAllAgents();

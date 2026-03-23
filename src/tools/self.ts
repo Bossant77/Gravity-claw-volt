@@ -109,6 +109,21 @@ export function registerSelfTools(): void {
         return { result: `Failed to save directive: ${msg}` };
       }
     },
+    verifier: async (args) => {
+      const key = String(args.key).toLowerCase().replace(/\s+/g, "_");
+      try {
+        const found = await searchDirectives(key);
+        const match = found.find((d) => d.key === key && d.active);
+        return {
+          verified: !!match,
+          detail: match
+            ? `Directive "${key}" confirmed active in DB`
+            : `Directive "${key}" NOT found as active in DB after upsert`,
+        };
+      } catch {
+        return { verified: false, detail: `Failed to verify directive "${key}"` };
+      }
+    },
   });
 
   // ── self_read ───────────────────────────────────────
@@ -190,6 +205,21 @@ export function registerSelfTools(): void {
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         return { result: `Failed to delete directive: ${msg}` };
+      }
+    },
+    verifier: async (args) => {
+      const key = String(args.key).toLowerCase().replace(/\s+/g, "_");
+      try {
+        const found = await searchDirectives(key);
+        const stillActive = found.find((d) => d.key === key && d.active);
+        return {
+          verified: !stillActive,
+          detail: !stillActive
+            ? `Directive "${key}" confirmed deactivated`
+            : `Directive "${key}" is STILL active after deactivation attempt`,
+        };
+      } catch {
+        return { verified: false, detail: `Failed to verify deactivation of "${key}"` };
       }
     },
   });

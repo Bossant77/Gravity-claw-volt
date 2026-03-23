@@ -158,6 +158,22 @@ export async function runAgent(
           },
         });
 
+        // Audit trail — structured log of every tool call for debugging
+        const auditArgs = Object.fromEntries(
+          Object.entries(fc.args ?? {}).filter(([k]) => !k.startsWith("__"))
+        );
+        log.info(
+          {
+            chatId,
+            threadId,
+            tool: fc.name,
+            args: auditArgs,
+            resultPreview: toolOutput.result.slice(0, 200),
+            hasFile: !!toolOutput.file,
+          },
+          "🔍 Tool audit trail"
+        );
+
         // Collect files to send
         if (toolOutput.file) {
           files.push(toolOutput.file);

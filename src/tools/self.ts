@@ -39,6 +39,57 @@ This file is auto-updated as I learn new procedures.
   "notes.md": `# Volt — Notes
 Free-form notes and context I want to remember.
 `,
+  "tool-template.md": `# Volt — Tool Creation Template
+
+Use this template when creating a new tool file in src/tools/.
+
+## File Structure
+
+\`\`\`typescript
+import { registerTool } from "./registry.js";
+import { SchemaType } from "@google/generative-ai";
+import { log } from "../logger.js";
+
+export function registerMyNewTool(): void {
+  registerTool({
+    name: "my_tool_name",           // snake_case, descriptive
+    description: "What this tool does. Be specific — the LLM reads this to decide when to use the tool.",
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        param1: {
+          type: SchemaType.STRING,   // STRING, NUMBER, BOOLEAN, ARRAY, OBJECT
+          description: "Description of this parameter",
+        },
+      },
+      required: ["param1"],         // List required params
+    },
+    handler: async (args) => {
+      const param1 = String(args.param1);
+
+      try {
+        // Tool logic here
+        const result = "result of the operation";
+        return { result };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return { result: \\\`Error: \\\${msg}\\\` };
+      }
+    },
+  });
+
+  log.info("My new tool registered");
+}
+\`\`\`
+
+## Important Rules
+1. Always export a single register function named register[ToolName]Tool()
+2. Use SchemaType for ALL parameter type definitions
+3. Handler must return { result: string } (and optionally { file: ... } for sending files)
+4. Use log from ../logger.js — never console.log
+5. After creating the file, remind the user that src/index.ts needs updating to import and call the register function
+6. For API integrations, store credentials in config.ts as optional env vars
+`,
 };
 
 /**

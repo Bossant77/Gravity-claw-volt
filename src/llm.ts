@@ -8,6 +8,7 @@ import {
 import { config } from "./config.js";
 import { log } from "./logger.js";
 import { getToolDeclarations } from "./tools/registry.js";
+import { getToolInventoryBlock } from "./guards/hallucination.js";
 
 // ── System Prompt ───────────────────────────────────────
 
@@ -92,7 +93,8 @@ You have MCP tools prefixed with mcp_github_ and mcp_filesystem_.
 - Example: mcp_github_list_commits with owner="Bossant77", repo="Gravity-claw-volt"
 - Do NOT waste iterations searching — you already know the owner and repo.
 
-Current date: ${new Date().toISOString().split("T")[0]}`;
+Current date: ${new Date().toISOString().split("T")[0]}
+${getToolInventoryBlock()}`;
 
 // ── Client ──────────────────────────────────────────────
 

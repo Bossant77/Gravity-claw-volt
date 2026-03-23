@@ -217,6 +217,20 @@ export function registerCronJobsTool(): void {
         result: `✅ Cron job "${name}" created with schedule: ${cronExpr}\nMessage: "${message}"`,
       };
     },
+    verifier: async (args) => {
+      const chatId = (args as Record<string, unknown>).__chatId ?? 0;
+      const name = String(args.name);
+      const result = await query<{ id: number }>(
+        `SELECT id FROM cron_jobs WHERE chat_id = $1 AND name = $2 ORDER BY created_at DESC LIMIT 1`,
+        [chatId, name]
+      );
+      return {
+        verified: result.rows.length > 0,
+        detail: result.rows.length > 0
+          ? `Cron job #${result.rows[0].id} "${name}" confirmed in DB`
+          : `No cron job "${name}" found in DB after insert`,
+      };
+    },
   });
 
   registerTool({

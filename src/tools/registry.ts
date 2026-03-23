@@ -3,6 +3,13 @@ import type { FunctionDeclaration } from "@google/generative-ai";
 
 // ── Tool Types ──────────────────────────────────────────
 
+export interface VerificationResult {
+  /** Whether the action was verified as persisted */
+  verified: boolean;
+  /** Details about what was checked */
+  detail: string;
+}
+
 export interface ToolConfig {
   name: string;
   description: string;
@@ -11,6 +18,8 @@ export interface ToolConfig {
   requiresConfirmation?: boolean;
   /** The function that executes the tool */
   handler: (args: Record<string, unknown>) => Promise<ToolOutput>;
+  /** Optional post-action verifier — confirms the action actually persisted */
+  verifier?: (args: Record<string, unknown>, result: ToolOutput) => Promise<VerificationResult>;
 }
 
 export interface ToolOutput {
@@ -81,6 +90,27 @@ export async function executeTool(
       return {
         result: `Tool "${name}" executed successfully but returned no output. Consider trying a different approach or checking if the input was correct.`,
       };
+    }
+
+    // Post-action verification — confirm critical actions persisted
+    if (tool.verifier) {
+      try {
+        const verification = await tool.verifier(args, output);
+        if (!verification.verified) {
+          log.error(
+            { tool: name, verification: verification.detail },
+            "Post-action verification FAILED — action did not persist"
+          );
+          output.result += `\n\n⚠️ VERIFICATION FAILED: ${verification.detail}. The action may not have been saved. Try again or investigate.`;
+        } else {
+          log.info(
+            { tool: name, verification: verification.detail },
+            "Post-action verification passed ✅"
+          );
+        }
+      } catch (verifyErr) {
+        log.warn({ tool: name, err: verifyErr }, "Verifier threw — skipping verification");
+      }
     }
 
     log.info({ tool: name, resultLength: output.result.length }, "Tool completed");

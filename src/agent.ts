@@ -1,5 +1,6 @@
 import { chat, chatWithAudio, chatWithToolResults, toGeminiHistory, SYSTEM_PROMPT } from "./llm.js";
 import { log } from "./logger.js";
+import { detectHallucinatedAction } from "./guards/hallucination.js";
 import { config } from "./config.js";
 import {
   saveMessage,
@@ -112,6 +113,7 @@ export async function runAgent(
 
   let iterations = 0;
   let finalText = "";
+  let toolsCalledThisLoop = false;
   const files: ToolOutput["file"][] = [];
 
   while (iterations < config.maxIterations) {
@@ -124,6 +126,7 @@ export async function runAgent(
     }
 
     if (response.functionCalls && response.functionCalls.length > 0) {
+      toolsCalledThisLoop = true;
       // Add model's raw response to conversation (preserves thought_signature)
       if (response.modelContent) {
         conversationContents.push(response.modelContent);
@@ -179,6 +182,76 @@ export async function runAgent(
   if (iterations >= config.maxIterations) {
     log.warn({ chatId, threadId, iterations }, "Agent loop hit max iterations");
     finalText += "\n\n⚠️ _Reached maximum processing steps._";
+  }
+
+  // ── Anti-Hallucination Guard ────────────────────────────
+  const hallucinationCheck = detectHallucinatedAction(finalText, toolsCalledThisLoop);
+  if (hallucinationCheck.detected && hallucinationCheck.reprompt) {
+    log.warn(
+      { chatId, threadId, matchedPattern: hallucinationCheck.matchedPattern },
+      "Anti-hallucination guard triggered — re-prompting LLM"
+    );
+
+    // Re-prompt: push correction and call Gemini one more time
+    conversationContents.push(
+      { role: "model", parts: [{ text: finalText }] },
+      { role: "user", parts: [{ text: hallucinationCheck.reprompt }] }
+    );
+
+    try {
+      const retryResponse = await callWithRetry(() =>
+        chatWithToolResults(conversationContents)
+      );
+
+      if (retryResponse.functionCalls && retryResponse.functionCalls.length > 0) {
+        // LLM corrected itself — process tool calls
+        if (retryResponse.modelContent) {
+          conversationContents.push(retryResponse.modelContent);
+        }
+        const functionResponseParts = [];
+        for (const fc of retryResponse.functionCalls) {
+          const argsWithContext = { ...fc.args, __chatId: chatId, __threadId: threadId };
+          let toolOutput: ToolOutput;
+          try {
+            toolOutput = await executeTool(fc.name, argsWithContext);
+          } catch (toolErr) {
+            const errMsg = toolErr instanceof Error ? toolErr.message : String(toolErr);
+            toolOutput = { result: `⚠️ Tool "${fc.name}" failed: ${errMsg}` };
+          }
+          functionResponseParts.push({
+            functionResponse: {
+              name: fc.name,
+              id: (fc as unknown as Record<string, unknown>).id as string | undefined,
+              response: { result: toolOutput.result },
+            },
+          });
+          if (toolOutput.file) files.push(toolOutput.file);
+        }
+        conversationContents.push({ role: "user", parts: functionResponseParts });
+
+        // Get final text after tool execution
+        const finalResponse = await callWithRetry(() =>
+          chatWithToolResults(conversationContents)
+        );
+        finalText = finalResponse.text ?? "Action completed.";
+        log.info({ chatId, threadId }, "Anti-hallucination guard: LLM corrected itself and used tool");
+      } else if (retryResponse.text) {
+        // LLM responded with text again — check if it's still hallucinating
+        const secondCheck = detectHallucinatedAction(retryResponse.text, false);
+        if (secondCheck.detected) {
+          log.error(
+            { chatId, threadId, matchedPattern: secondCheck.matchedPattern },
+            "Anti-hallucination guard: LLM hallucinated AGAIN after re-prompt — giving up"
+          );
+          // Keep original text but don't loop forever
+        } else {
+          finalText = retryResponse.text;
+        }
+      }
+    } catch (retryErr) {
+      log.error({ err: retryErr }, "Anti-hallucination re-prompt failed");
+      // Keep original finalText
+    }
   }
 
   // Save response (thread-scoped)

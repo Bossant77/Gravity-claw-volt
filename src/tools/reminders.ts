@@ -100,6 +100,19 @@ export function registerRemindersTool(): void {
         result: `Reminder set for ${dueTime.toLocaleTimeString()} (in ${minutes} minutes): "${message}"`,
       };
     },
+    verifier: async (args) => {
+      const chatId = (args as Record<string, unknown>).__chatId ?? 0;
+      const result = await query<{ id: number }>(
+        `SELECT id FROM reminders WHERE chat_id = $1 AND delivered = false ORDER BY created_at DESC LIMIT 1`,
+        [chatId]
+      );
+      return {
+        verified: result.rows.length > 0,
+        detail: result.rows.length > 0
+          ? `Reminder #${result.rows[0].id} confirmed in DB`
+          : "No undelivered reminder found in DB after insert",
+      };
+    },
   });
 
   registerTool({

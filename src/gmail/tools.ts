@@ -6,6 +6,8 @@ import {
   getMessage,
   sendEmail,
   replyToMessage,
+  listAttachments,
+  downloadAttachment,
   resolveAccount,
   getInitializedAccounts,
   getAccountConfig,
@@ -185,8 +187,80 @@ export function registerGmailTools(): void {
     },
   });
 
+  // ── Attachment Tools ──────────────────────────────────────
+
+  registerTool({
+    name: "gmail_get_attachments",
+    description: `List all attachments in a specific email from Santiago's Gmail. Use message_id from gmail_read or gmail_search results. Returns attachment IDs needed for downloading.`,
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        account: {
+          type: SchemaType.STRING,
+          description: 'Account: "personal1", "personal2", or "work".',
+        },
+        message_id: {
+          type: SchemaType.STRING,
+          description: "The message ID (from gmail_read or gmail_search results)",
+        },
+      },
+      required: ["message_id"],
+    },
+    handler: async (args) => {
+      const accountName = resolveAccount(args.account as string | undefined);
+      if (!accountName) {
+        return { result: `Unknown account "${args.account}". Available: ${accountList}` };
+      }
+
+      const { result } = await listAttachments(accountName, String(args.message_id));
+      return { result };
+    },
+  });
+
+  registerTool({
+    name: "gmail_download_attachment",
+    description: `Download a specific attachment from an email in Santiago's Gmail. Use attachment_id from gmail_get_attachments results. The file is saved to workspace and sent to the user via Telegram.`,
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        account: {
+          type: SchemaType.STRING,
+          description: 'Account: "personal1", "personal2", or "work".',
+        },
+        message_id: {
+          type: SchemaType.STRING,
+          description: "The message ID containing the attachment",
+        },
+        attachment_id: {
+          type: SchemaType.STRING,
+          description: "The attachment ID (from gmail_get_attachments results)",
+        },
+        filename: {
+          type: SchemaType.STRING,
+          description: "Optional custom filename to save as (overrides original name)",
+        },
+      },
+      required: ["message_id", "attachment_id"],
+    },
+    handler: async (args) => {
+      const accountName = resolveAccount(args.account as string | undefined);
+      if (!accountName) {
+        return { result: `Unknown account "${args.account}". Available: ${accountList}` };
+      }
+
+      const { result, file } = await downloadAttachment(
+        accountName,
+        String(args.message_id),
+        String(args.attachment_id),
+        args.filename ? String(args.filename) : undefined
+      );
+
+      return { result, file };
+    },
+  });
+
   log.info(
-    { accounts: accounts.length, tools: 4 },
+    { accounts: accounts.length, tools: 6 },
     "Gmail tools registered"
   );
 }

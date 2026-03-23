@@ -12,7 +12,25 @@ import { getToolInventoryBlock } from "./guards/hallucination.js";
 
 // ── System Prompt ───────────────────────────────────────
 
-export const SYSTEM_PROMPT = `You are Gravity Claw - a personal AI assistant running as a Telegram bot.
+/**
+ * Build the system prompt with CURRENT date/time.
+ * Must be a function, not a const — otherwise the date freezes at server start.
+ */
+export function getSystemPrompt(): string {
+  // Format current date/time in the configured timezone
+  const now = new Date();
+  const dateTime = new Intl.DateTimeFormat("es-MX", {
+    timeZone: config.timezone,
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  }).format(now);
+
+  return `You are Gravity Claw - a personal AI assistant running as a Telegram bot.
 
 Your traits:
 - Concise but thorough. Don't ramble, but don't omit important details.
@@ -93,8 +111,14 @@ You have MCP tools prefixed with mcp_github_ and mcp_filesystem_.
 - Example: mcp_github_list_commits with owner="Bossant77", repo="Gravity-claw-volt"
 - Do NOT waste iterations searching — you already know the owner and repo.
 
-Current date: ${new Date().toISOString().split("T")[0]}
+Current date and time: ${dateTime}
+Timezone: ${config.timezone}
 ${getToolInventoryBlock()}`;
+}
+
+// Keep backward-compatible export (deprecated — use getSystemPrompt() instead)
+/** @deprecated Use getSystemPrompt() for fresh date/time */
+export const SYSTEM_PROMPT = getSystemPrompt();
 
 // ── Client ──────────────────────────────────────────────
 
@@ -140,7 +164,7 @@ export async function chat(
   const toolDeclarations = getToolDeclarations();
 
   // Build the full system prompt with optional topic context and directives
-  let fullSystemPrompt = SYSTEM_PROMPT;
+  let fullSystemPrompt = getSystemPrompt();
   if (directivesBlock) {
     fullSystemPrompt += directivesBlock;
   }
@@ -245,7 +269,7 @@ export async function chatWithAudio(
 
   const audioPrompt = `The user sent a voice message. First, understand what they said. Then respond naturally to their message. If the audio is unclear, ask for clarification.`;
 
-  let fullSystemPrompt = SYSTEM_PROMPT;
+  let fullSystemPrompt = getSystemPrompt();
   if (topicContext) {
     fullSystemPrompt += `\n\n${topicContext}`;
   }

@@ -1,7 +1,7 @@
 import { GoogleGenerativeAI, type Content, type Part } from "@google/generative-ai";
 import { config } from "./config.js";
 import { log } from "./logger.js";
-import { toGeminiHistory, SYSTEM_PROMPT } from "./llm.js";
+import { toGeminiHistory, getSystemPrompt } from "./llm.js";
 import type { AgentMessage } from "./types.js";
 
 // ── Constants ───────────────────────────────────────────

@@ -1,4 +1,4 @@
-import { chat, chatWithAudio, chatWithToolResults, toGeminiHistory, SYSTEM_PROMPT } from "./llm.js";
+import { chat, chatWithAudio, chatWithToolResults, toGeminiHistory, getSystemPrompt } from "./llm.js";
 import { log } from "./logger.js";
 import { detectHallucinatedAction } from "./guards/hallucination.js";
 import { config } from "./config.js";
@@ -95,7 +95,7 @@ export async function runAgent(
   }
 
   // Build the full system prompt (with directives + topic context for multi-turn)
-  let fullSystemPrompt = SYSTEM_PROMPT;
+  let fullSystemPrompt = getSystemPrompt();
   if (directivesBlock) {
     fullSystemPrompt += directivesBlock;
   }
@@ -114,6 +114,7 @@ export async function runAgent(
   let iterations = 0;
   let finalText = "";
   let toolsCalledThisLoop = false;
+  const toolNamesCalled: string[] = []; // Track specific tools for hallucination guard
   const files: ToolOutput["file"][] = [];
 
   while (iterations < config.maxIterations) {
@@ -127,6 +128,10 @@ export async function runAgent(
 
     if (response.functionCalls && response.functionCalls.length > 0) {
       toolsCalledThisLoop = true;
+      // Track tool names for hallucination detection
+      for (const fc of response.functionCalls) {
+        toolNamesCalled.push(fc.name);
+      }
       // Add model's raw response to conversation (preserves thought_signature)
       if (response.modelContent) {
         conversationContents.push(response.modelContent);
@@ -186,6 +191,17 @@ export async function runAgent(
         parts: functionResponseParts,
       });
 
+      // Budget warning — tell the LLM it's running low on steps
+      if (iterations >= config.maxIterations - 3) {
+        const remaining = config.maxIterations - iterations;
+        conversationContents.push({
+          role: "user",
+          parts: [{
+            text: `⚠️ BUDGET WARNING: Te quedan ${remaining} pasos. Si la tarea es compleja, DELEGA con delegate_task AHORA. Si ya terminaste lo esencial, da tu respuesta final. NO desperdicies pasos.`,
+          }],
+        });
+      }
+
       // Call Gemini again with tool results — with retry
       response = await callWithRetry(() => chatWithToolResults(conversationContents));
     } else {
@@ -196,12 +212,12 @@ export async function runAgent(
   }
 
   if (iterations >= config.maxIterations) {
-    log.warn({ chatId, threadId, iterations }, "Agent loop hit max iterations");
-    finalText += "\n\n⚠️ _Reached maximum processing steps._";
+    log.warn({ chatId, threadId, iterations, toolsCalled: toolNamesCalled }, "Agent loop hit max iterations");
+    finalText += "\n\n⚠️ _Alcancé el límite de pasos de procesamiento. Si la tarea no está completa, pídeme que la retome o que delegue a un sub-agente._";
   }
 
   // ── Anti-Hallucination Guard ────────────────────────────
-  const hallucinationCheck = detectHallucinatedAction(finalText, toolsCalledThisLoop);
+  const hallucinationCheck = detectHallucinatedAction(finalText, toolsCalledThisLoop, toolNamesCalled);
   if (hallucinationCheck.detected && hallucinationCheck.reprompt) {
     log.warn(
       { chatId, threadId, matchedPattern: hallucinationCheck.matchedPattern },

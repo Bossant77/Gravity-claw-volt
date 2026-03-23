@@ -30,6 +30,28 @@ const ACTION_CLAIM_PATTERNS: RegExp[] = [
 ];
 
 /**
+ * Patterns that indicate the LLM is claiming it *delegated* work.
+ * Only valid if delegate_task was actually called.
+ */
+const DELEGATION_CLAIM_PATTERNS: RegExp[] = [
+  // Spanish — delegation claims
+  /pipeline\s+(activad[ao]|en\s+marcha|delegad[ao]|iniciad[ao]|lanzad[ao])/i,
+  /sub-?agent(e)?s?\s+(trabajando|en\s+marcha|ejecutando|activ[ao]s?)/i,
+  /ya\s+(delegué|asigné|lancé|activé)\s/i,
+  /he\s+(delegado|asignado|lanzado|activado)\s+(la\s+tarea|el\s+trabajo|los\s+agentes)/i,
+  /cadena\s+de\s+(sub-?agentes|agentes)\s/i,
+  /el\s+(analista|codificador|investigador|escritor)\s+se\s+encargará/i,
+  /agentes?\s+(procesando|analizando|trabajando|en\s+marcha)/i,
+
+  // English — delegation claims
+  /I('ve|\s+have)\s+(delegated|assigned|dispatched|launched)\s/i,
+  /pipeline\s+(started|activated|running|launched)/i,
+  /sub-?agents?\s+(working|running|active|processing)/i,
+  /task\s+(delegated|dispatched|handed\s+off)/i,
+  /agents?\s+are\s+(now\s+)?(working|processing|analyzing)/i,
+];
+
+/**
  * Phrases that are safe — the LLM is describing what it DID via a tool (not hallucinating).
  * Used to reduce false positives when the guard runs after tool calls.
  */
@@ -56,16 +78,49 @@ export interface HallucinationCheck {
  *
  * @param text - The LLM's text response
  * @param toolsWereCalled - Whether any tools were called during this agent loop
+ * @param toolNamesCalled - Specific tool names called (for delegation check)
  */
 export function detectHallucinatedAction(
   text: string,
-  toolsWereCalled: boolean
+  toolsWereCalled: boolean,
+  toolNamesCalled: string[] = []
 ): HallucinationCheck {
-  // If tools were actually called, the LLM is likely describing real results
+  // If tools were actually called, check specifically for delegation hallucinations
   if (toolsWereCalled) {
+    // Even if tools were called, check if LLM claims delegation without calling delegate_task
+    const delegateWasCalled = toolNamesCalled.includes("delegate_task");
+    if (!delegateWasCalled) {
+      for (const pattern of DELEGATION_CLAIM_PATTERNS) {
+        const match = text.match(pattern);
+        if (match) {
+          // Check safe context first
+          let isSafe = false;
+          for (const safe of SAFE_CONTEXT_PATTERNS) {
+            if (safe.test(text)) { isSafe = true; break; }
+          }
+          if (isSafe) continue;
+
+          log.warn(
+            { matchedPattern: match[0], textSnippet: text.slice(0, 200) },
+            "Delegation hallucination detected — LLM claimed delegation without calling delegate_task"
+          );
+          return {
+            detected: true,
+            matchedPattern: match[0],
+            reprompt:
+              `⚠️ VERIFICATION FAILURE: You claimed to have delegated a task ("${match[0]}"), ` +
+              `but you did NOT call the delegate_task tool. This is FORBIDDEN. ` +
+              `To delegate work to sub-agents, you MUST call the delegate_task tool. ` +
+              `DO IT NOW: call delegate_task with the appropriate agent, task, and mode. ` +
+              `Do NOT respond with text claiming you delegated — CALL THE TOOL.`,
+          };
+        }
+      }
+    }
     return { detected: false };
   }
 
+  // No tools were called — check for all action claim patterns
   // Check for safe context (tool result descriptions) — skip if found
   for (const safe of SAFE_CONTEXT_PATTERNS) {
     if (safe.test(text)) {
@@ -73,7 +128,27 @@ export function detectHallucinatedAction(
     }
   }
 
-  // Scan for action claim patterns
+  // Check delegation claims first (more specific)
+  for (const pattern of DELEGATION_CLAIM_PATTERNS) {
+    const match = text.match(pattern);
+    if (match) {
+      log.warn(
+        { matchedPattern: match[0], textSnippet: text.slice(0, 200) },
+        "Delegation hallucination detected — LLM claimed delegation without ANY tool call"
+      );
+      return {
+        detected: true,
+        matchedPattern: match[0],
+        reprompt:
+          `⚠️ VERIFICATION FAILURE: You claimed to have delegated a task ("${match[0]}"), ` +
+          `but NO tool was called in this interaction. This is FORBIDDEN. ` +
+          `You MUST call delegate_task to actually delegate work. ` +
+          `Re-examine the user's request and CALL delegate_task NOW.`,
+      };
+    }
+  }
+
+  // Then check general action claims
   for (const pattern of ACTION_CLAIM_PATTERNS) {
     const match = text.match(pattern);
     if (match) {

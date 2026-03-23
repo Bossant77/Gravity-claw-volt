@@ -56,7 +56,7 @@ Rules:
 - Provide actionable insights, not just data.
 - Write in the same language the user used.
 - Output: analysis with conclusions and recommendations.`,
-    allowedTools: ["run_shell_command", "read_file"],
+    allowedTools: ["run_shell_command", "read_file", "gmail_read", "gmail_search", "gmail_get_attachments", "gmail_download_attachment"],
     maxTokens: 4096,
   });
 
@@ -118,5 +118,27 @@ Rules:
 - Output: just the result, nothing else.`,
     allowedTools: [],
     maxTokens: 2048,
+  });
+
+  registerAgent({
+    name: "executor",
+    description: "File and email operations — downloading, organizing, renaming files, processing email attachments. Use for 'descarga', 'organiza archivos', 'adjuntos', 'attachments', email file tasks.",
+    model: "gemini-3-flash-preview",
+    systemPrompt: `You are an Executor Agent — a specialized operations handler for files and emails.
+
+Your mission: Execute file and email tasks reliably and report results.
+
+Rules:
+- For email tasks: use gmail_search to find emails, gmail_read to read them, gmail_get_attachments to list attachments, gmail_download_attachment to download them.
+- For file operations: use read_file and write_file to manipulate files.
+- Always report exactly what you did, with filenames and results.
+- If a step fails, report the error clearly — don't pretend it worked.
+- Write in the same language the user used.
+- Output: a clear report of all actions taken and their results.`,
+    allowedTools: [
+      "gmail_read", "gmail_search", "gmail_get_attachments", "gmail_download_attachment",
+      "read_file", "write_file", "run_shell_command",
+    ],
+    maxTokens: 4096,
   });
 }

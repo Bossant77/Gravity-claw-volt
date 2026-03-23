@@ -25,6 +25,28 @@ export function setSubAgentBot(bot: Bot): void {
 
 const genAI = new GoogleGenerativeAI(config.geminiApiKey);
 
+// ── Helper: send message to the correct topic thread ────
+
+async function sendToThread(
+  chatId: number,
+  text: string,
+  threadId?: number
+): Promise<void> {
+  if (!botRef) return;
+
+  const options: Record<string, unknown> = {};
+  if (threadId) {
+    options.message_thread_id = threadId;
+  }
+
+  // Split long messages
+  if (text.length > 4000) {
+    await botRef.api.sendMessage(chatId, text.slice(0, 3900) + "...", options);
+  } else {
+    await botRef.api.sendMessage(chatId, text, options);
+  }
+}
+
 // ── Core: Run a Single Sub-Agent ────────────────────────
 
 async function executeAgent(
@@ -62,7 +84,7 @@ async function executeAgent(
 
   try {
     let iterations = 0;
-    const maxIterations = 8;
+    const maxIterations = 15; // Increased from 8 — sub-agents need more room for multi-tool tasks
 
     while (iterations < maxIterations) {
       iterations++;
@@ -88,6 +110,10 @@ async function executeAgent(
         // Execute tools
         const toolResults: Part[] = [];
         for (const fc of functionCalls) {
+          log.info(
+            { agent: agentConfig.name, tool: fc.name, taskId, iteration: iterations },
+            "Sub-agent executing tool"
+          );
           const toolOutput = await executeTool(fc.name, (fc.args ?? {}) as Record<string, unknown>);
           toolResults.push({
             functionResponse: {
@@ -98,6 +124,15 @@ async function executeAgent(
         }
 
         contents.push({ role: "user", parts: toolResults });
+
+        // Budget warning for sub-agents too
+        if (iterations >= maxIterations - 2) {
+          contents.push({
+            role: "user",
+            parts: [{ text: `⚠️ BUDGET WARNING: Te quedan ${maxIterations - iterations} pasos. Termina lo esencial y da tu respuesta final AHORA.` }],
+          });
+        }
+
         continue; // Loop back for next model response
       }
 
@@ -107,7 +142,7 @@ async function executeAgent(
       return text;
     }
 
-    return "[Agent reached max iterations]";
+    return "[Agent reached max iterations — la tarea requiere más pasos de los permitidos. Considera dividir en sub-tareas más pequeñas.]";
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     log.error({ agent: agentConfig.name, err }, "Sub-agent error");
@@ -119,20 +154,22 @@ async function executeAgent(
 
 /**
  * Solo mode — one agent, one task, runs async and sends result to Telegram.
+ * Now properly routes results to the correct topic thread.
  */
 export async function runSolo(
   agentName: string,
   task: string,
-  chatId: number
+  chatId: number,
+  threadId?: number
 ): Promise<number> {
   const agentConfig = getAgent(agentName);
   if (!agentConfig) throw new Error(`Unknown agent: ${agentName}`);
 
-  // Create task record
+  // Create task record (with thread_id for topic-scoped tracking)
   const res = await pool.query(
-    `INSERT INTO tasks (chat_id, agent, mode, model, task, status)
-     VALUES ($1, $2, 'solo', $3, $4, 'queued') RETURNING id`,
-    [chatId, agentName, agentConfig.model, task]
+    `INSERT INTO tasks (chat_id, thread_id, agent, mode, model, task, status)
+     VALUES ($1, $2, $3, 'solo', $4, $5, 'queued') RETURNING id`,
+    [chatId, threadId ?? null, agentName, agentConfig.model, task]
   );
   const taskId = res.rows[0].id as number;
 
@@ -145,26 +182,16 @@ export async function runSolo(
         [result, taskId]
       );
 
-      // Send result to Telegram
-      if (botRef) {
-        const header = `🤖 **${agentConfig.name}** (${agentConfig.model}) completó:\n\n`;
-        const message = header + result;
-        // Split if too long
-        if (message.length > 4000) {
-          await botRef.api.sendMessage(chatId, header + result.slice(0, 3900) + "...");
-        } else {
-          await botRef.api.sendMessage(chatId, message);
-        }
-      }
+      // Send result to the correct topic thread
+      const header = `🤖 **${agentConfig.name}** (${agentConfig.model}) completó:\n\n`;
+      await sendToThread(chatId, header + result, threadId);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       await pool.query(
         "UPDATE tasks SET status = 'failed', result = $1, completed_at = NOW() WHERE id = $2",
         [msg, taskId]
       );
-      if (botRef) {
-        await botRef.api.sendMessage(chatId, `❌ Agent ${agentName} failed: ${msg}`);
-      }
+      await sendToThread(chatId, `❌ Agent ${agentName} failed: ${msg}`, threadId);
     }
   })();
 
@@ -173,16 +200,18 @@ export async function runSolo(
 
 /**
  * Swarm mode — multiple agents in parallel, results merged.
+ * Now properly routes results to the correct topic thread.
  */
 export async function runSwarm(
   agentNames: string[],
   task: string,
-  chatId: number
+  chatId: number,
+  threadId?: number
 ): Promise<number[]> {
   const taskIds: number[] = [];
 
   for (const name of agentNames) {
-    const id = await runSolo(name, task, chatId);
+    const id = await runSolo(name, task, chatId, threadId);
     taskIds.push(id);
   }
 
@@ -191,17 +220,19 @@ export async function runSwarm(
 
 /**
  * Pipeline mode — sequential chain, output of each feeds into the next.
+ * Now properly routes results to the correct topic thread.
  */
 export async function runPipeline(
   agentNames: string[],
   task: string,
-  chatId: number
+  chatId: number,
+  threadId?: number
 ): Promise<number> {
   // Create a parent task
   const res = await pool.query(
-    `INSERT INTO tasks (chat_id, agent, mode, model, task, status)
-     VALUES ($1, $2, 'pipeline', 'multi', $3, 'queued') RETURNING id`,
-    [chatId, agentNames.join(" → "), task]
+    `INSERT INTO tasks (chat_id, thread_id, agent, mode, model, task, status)
+     VALUES ($1, $2, $3, 'pipeline', 'multi', $4, 'queued') RETURNING id`,
+    [chatId, threadId ?? null, agentNames.join(" → "), task]
   );
   const parentTaskId = res.rows[0].id as number;
 
@@ -221,9 +252,9 @@ export async function runPipeline(
 
         // Create sub-task
         const subRes = await pool.query(
-          `INSERT INTO tasks (chat_id, agent, mode, model, task, status)
-           VALUES ($1, $2, 'pipeline-step', $3, $4, 'queued') RETURNING id`,
-          [chatId, agentName, agentConfig.model, currentInput.slice(0, 500)]
+          `INSERT INTO tasks (chat_id, thread_id, agent, mode, model, task, status)
+           VALUES ($1, $2, $3, 'pipeline-step', $4, $5, 'queued') RETURNING id`,
+          [chatId, threadId ?? null, agentName, agentConfig.model, currentInput.slice(0, 500)]
         );
         const subTaskId = subRes.rows[0].id as number;
 
@@ -244,24 +275,16 @@ export async function runPipeline(
         [finalResult, parentTaskId]
       );
 
-      if (botRef) {
-        const header = `🔗 **Pipeline** (${agentNames.join(" → ")}) completó:\n\n`;
-        const message = header + (allResults[allResults.length - 1] ?? "");
-        if (message.length > 4000) {
-          await botRef.api.sendMessage(chatId, header + message.slice(0, 3900) + "...");
-        } else {
-          await botRef.api.sendMessage(chatId, message);
-        }
-      }
+      // Send result to the correct topic thread
+      const header = `🔗 **Pipeline** (${agentNames.join(" → ")}) completó:\n\n`;
+      await sendToThread(chatId, header + (allResults[allResults.length - 1] ?? ""), threadId);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       await pool.query(
         "UPDATE tasks SET status = 'failed', result = $1, completed_at = NOW() WHERE id = $2",
         [msg, parentTaskId]
       );
-      if (botRef) {
-        await botRef.api.sendMessage(chatId, `❌ Pipeline failed: ${msg}`);
-      }
+      await sendToThread(chatId, `❌ Pipeline failed: ${msg}`, threadId);
     }
   })();
 

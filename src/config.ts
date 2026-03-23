@@ -35,7 +35,7 @@ export const config = {
   geminiModel: optional("GEMINI_MODEL", "gemini-3-flash-preview"),
 
   /** Max agentic loop iterations (safety limit) */
-  maxIterations: Number(optional("MAX_ITERATIONS", "15")),
+  maxIterations: Number(optional("MAX_ITERATIONS", "25")),
 
   /** Log level */
   logLevel: optional("LOG_LEVEL", "info") as

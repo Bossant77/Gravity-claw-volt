@@ -37,7 +37,7 @@ export function registerDelegateTool(): void {
       try {
         if (mode === "swarm") {
           const agentList = agentArg.split(",").map((a) => a.trim());
-          const taskIds = await runSwarm(agentList, task, chatId);
+          const taskIds = await runSwarm(agentList, task, chatId, threadId);
           return {
             result: `🐝 Swarm delegated! ${agentList.length} agents working in parallel: ${agentList.join(", ")}. Task IDs: ${taskIds.join(", ")}. I'll send results as each finishes.`,
           };
@@ -45,14 +45,14 @@ export function registerDelegateTool(): void {
 
         if (mode === "pipeline") {
           const agentList = agentArg.split(",").map((a) => a.trim());
-          const taskId = await runPipeline(agentList, task, chatId);
+          const taskId = await runPipeline(agentList, task, chatId, threadId);
           return {
             result: `🔗 Pipeline delegated! Chain: ${agentList.join(" → ")}. Task ID: ${taskId}. I'll send the final result when the chain completes.`,
           };
         }
 
         // Default: solo
-        const taskId = await runSolo(agentArg, task, chatId);
+        const taskId = await runSolo(agentArg, task, chatId, threadId);
         return {
           result: `🤖 Task delegated to **${agentArg}** agent! Task ID: ${taskId}. I'll send the result when it's done. Keep chatting!`,
         };

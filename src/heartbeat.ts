@@ -51,6 +51,14 @@ async function tick(): Promise<void> {
   if (hour === 22 && minute === 0) {
     await dailySummary();
   }
+
+  // Initiative Engine — every hour at the 30-minute mark
+  if (minute === 30) {
+    if (config.heartbeatChatId) {
+      const { runInitiativeCycle } = await import("./initiative.js");
+      await runInitiativeCycle(config.heartbeatChatId);
+    }
+  }
 }
 
 // ── Built-in Heartbeats ─────────────────────────────────
@@ -142,6 +150,14 @@ async function dailySummary(): Promise<void> {
     );
     const reminderCount = parseInt(remResult.rows[0]?.count ?? "0", 10);
 
+    // Count proactive initiatives
+    const initResult = await query<{ count: string }>(
+      `SELECT COUNT(*) as count FROM messages
+       WHERE chat_id = $1 AND role = 'assistant' AND content LIKE '%Acción Proactiva Autónoma%' AND created_at > NOW() - INTERVAL '24 hours'`,
+      [chatId]
+    );
+    const initiativeCount = parseInt(initResult.rows[0]?.count ?? "0", 10);
+
     // Server health
     const health = await getServerHealth();
 
@@ -162,6 +178,7 @@ async function dailySummary(): Promise<void> {
       `📊 **Resumen del día**\n\n` +
       `💬 Mensajes intercambiados: ${messageCount}\n` +
       `⏰ Recordatorios entregados: ${reminderCount}\n` +
+      `⚡ Iniciativas proactivas: ${initiativeCount}\n` +
       directiveStats +
       `🖥️ Server: disco ${health.diskUsedPercent}%, RAM ${health.memUsedPercent}%\n` +
       `⏱️ Uptime: ${health.uptime}\n\n` +

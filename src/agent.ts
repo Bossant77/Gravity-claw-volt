@@ -13,6 +13,7 @@ import { isCorrection, extractLesson, storeLesson, findRelevantLessons } from ".
 import { executeTool } from "./tools/registry.js";
 import { getTopicConfig } from "./topics.js";
 import { formatDirectivesForPrompt } from "./directives.js";
+import { getGoalsContext } from "./goals.js";
 import type { AgentMessage, AgentResponse } from "./types.js";
 import type { Content } from "@google/generative-ai";
 import type { ToolOutput } from "./tools/registry.js";
@@ -58,9 +59,12 @@ function isTransientError(err: unknown): boolean {
 export async function runAgent(
   chatId: number,
   userMessage: string,
-  threadId?: number
+  threadId?: number,
+  isInitiative: boolean = false
 ): Promise<AgentResponse> {
-  await saveMessage(chatId, "user", userMessage, threadId);
+  if (!isInitiative) {
+    await saveMessage(chatId, "user", userMessage, threadId);
+  }
 
   const history = await getRecentMessages(chatId, 50, threadId);
   const relevantMemories = await searchMemories(chatId, userMessage, 5, threadId);
@@ -102,6 +106,12 @@ export async function runAgent(
   if (topicContext) {
     fullSystemPrompt += `\n\n${topicContext}`;
   }
+  
+  const goalsContext = await getGoalsContext();
+  if (goalsContext) {
+    fullSystemPrompt += goalsContext;
+  }
+  
   fullSystemPrompt += memoryContext;
 
   const conversationContents: Content[] = [
@@ -286,19 +296,21 @@ export async function runAgent(
     }
   }
 
-  // Save response (thread-scoped)
-  await saveMessage(chatId, "assistant", finalText, threadId);
+  if (!isInitiative || finalText.trim() !== "PASS") {
+    // Save response (thread-scoped)
+    await saveMessage(chatId, "assistant", finalText, threadId);
 
-  const memoryContent = `User: ${userMessage}\nAssistant: ${finalText}`;
-  storeMemory(chatId, memoryContent, threadId).catch(() => {});
+    const memoryContent = `User: ${userMessage}\nAssistant: ${finalText}`;
+    storeMemory(chatId, memoryContent, threadId).catch(() => {});
 
-  // Self-learning: detect corrections and store lessons (thread-scoped)
-  if (isCorrection(userMessage) && history.length > 1) {
-    const lastAssistantMsg = history.filter((m) => m.role === "assistant").pop();
-    if (lastAssistantMsg) {
-      const lesson = await extractLesson(lastAssistantMsg.content, userMessage);
-      storeLesson(chatId, lastAssistantMsg.content, userMessage, lesson, threadId).catch(() => {});
-      log.info({ chatId, threadId }, "Self-learning: lesson extracted from correction");
+    // Self-learning: detect corrections and store lessons (thread-scoped)
+    if (isCorrection(userMessage) && history.length > 1) {
+      const lastAssistantMsg = history.filter((m) => m.role === "assistant").pop();
+      if (lastAssistantMsg) {
+        const lesson = await extractLesson(lastAssistantMsg.content, userMessage);
+        storeLesson(chatId, lastAssistantMsg.content, userMessage, lesson, threadId).catch(() => {});
+        log.info({ chatId, threadId }, "Self-learning: lesson extracted from correction");
+      }
     }
   }
 

@@ -14,6 +14,7 @@ import { executeTool } from "./tools/registry.js";
 import { getTopicConfig } from "./topics.js";
 import { formatDirectivesForPrompt } from "./directives.js";
 import { getGoalsContext } from "./goals.js";
+import { getActiveSkillsContext } from "./skills.js";
 import type { AgentMessage, AgentResponse } from "./types.js";
 import type { Content } from "@google/generative-ai";
 import type { ToolOutput } from "./tools/registry.js";
@@ -110,6 +111,11 @@ export async function runAgent(
   const goalsContext = await getGoalsContext();
   if (goalsContext) {
     fullSystemPrompt += goalsContext;
+  }
+  
+  const skillsContext = getActiveSkillsContext();
+  if (skillsContext) {
+    fullSystemPrompt += skillsContext;
   }
   
   fullSystemPrompt += memoryContext;

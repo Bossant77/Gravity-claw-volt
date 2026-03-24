@@ -23,6 +23,8 @@ import { initMcp, shutdownMcp } from "./mcp/client.js";
 import { initGmailClients } from "./gmail/client.js";
 import { registerGmailTools } from "./gmail/tools.js";
 import { setGmailNotificationBot, startGmailNotifications, stopGmailNotifications } from "./gmail/notifications.js";
+import { registerListSkills, registerInstallSkill } from "./tools/skill-manager.js";
+import { loadSkills } from "./skills.js";
 
 // ── Banner ──────────────────────────────────────────────
 
@@ -89,9 +91,14 @@ async function registerAllTools() {
   registerCronJobsTool();
   registerSelfTools();  // 🧠 Self-evolution tools
   registerCodeEditTools();  // 🔧 Code self-edit tools
+  registerListSkills();  // 🧩 Skill Ecosystem tools
+  registerInstallSkill();
 
   // Automatically load crystallized tools
   await loadCustomTools();
+
+  // Parse and load installed skills from src/skills
+  await loadSkills();
 
   // Sub-agents must be registered before delegate tool
   registerAllAgents();

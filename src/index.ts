@@ -5,6 +5,7 @@ import { initDatabase, shutdown as dbShutdown } from "./db.js";
 
 // Import tool registrations
 import { registerWebSearchTool } from "./tools/web-search.js";
+import { registerFoundryTools } from "./tools/foundry.js";
 import { registerBrowserTool } from "./tools/browser.js";
 import { registerShellTool } from "./tools/shell.js";
 import { registerFilesTool } from "./tools/files.js";
@@ -33,10 +34,52 @@ console.log(`
    ─────────────────────────────
 `);
 
+import fs from "fs/promises";
+import path from "path";
+import { fileURLToPath } from "url";
+
 // ── Register Tools ──────────────────────────────────────
 
-function registerAllTools() {
+async function loadCustomTools() {
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  const customToolsDir = path.join(__dirname, "tools", "custom");
+  
+  try {
+    await fs.access(customToolsDir);
+  } catch {
+    // Directory doesn't exist yet, that's fine
+    return;
+  }
+
+  const files = await fs.readdir(customToolsDir);
+  let loadedCount = 0;
+
+  for (const file of files) {
+    if (file.endsWith(".js") || file.endsWith(".ts")) {
+      try {
+        // dynamic import using file:// URL to avoid issues on Windows
+        const modulePath = path.join(customToolsDir, file);
+        const moduleUrl = `file://${modulePath.replace(/\\/g, "/")}`;
+        const customToolModule = await import(moduleUrl);
+        
+        if (typeof customToolModule.register === "function") {
+          customToolModule.register();
+          loadedCount++;
+        }
+      } catch (err) {
+        log.error({ file, err }, "Failed to load custom tool");
+      }
+    }
+  }
+  
+  if (loadedCount > 0) {
+    log.info(`Loaded ${loadedCount} custom tool(s) from Foundry.`);
+  }
+}
+
+async function registerAllTools() {
   registerWebSearchTool();
+  registerFoundryTools();
   registerBrowserTool();
   registerShellTool();
   registerFilesTool();
@@ -47,6 +90,9 @@ function registerAllTools() {
   registerSelfTools();  // 🧠 Self-evolution tools
   registerCodeEditTools();  // 🔧 Code self-edit tools
 
+  // Automatically load crystallized tools
+  await loadCustomTools();
+
   // Sub-agents must be registered before delegate tool
   registerAllAgents();
   registerDelegateTool();
@@ -55,13 +101,15 @@ function registerAllTools() {
 // ── Start Bot ───────────────────────────────────────────
 
 async function main() {
+  // Load any custom tools from src/tools/custom
+  await loadCustomTools();
   log.info("Starting Gravity Claw...");
 
   // Initialize database
   await initDatabase();
 
   // Register all tools
-  registerAllTools();
+  await registerAllTools();
 
   // Initialize Gmail API (multi-account)
   initGmailClients();

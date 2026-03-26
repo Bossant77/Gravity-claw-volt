@@ -117,4 +117,38 @@ export function registerDelegateTool(): void {
       }
     },
   });
+
+  registerTool({
+    name: "cancel_task",
+    description: "Cancel a queued or running sub-agent task. Use this if the user changes instructions or abandons a task before it completes.",
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        taskId: {
+          type: SchemaType.NUMBER,
+          description: "The integer ID of the task to cancel.",
+        },
+      },
+      required: ["taskId"],
+    },
+    handler: async (args) => {
+      const taskId = Number(args.taskId);
+      if (!taskId) return { result: "Error: taskId is required." };
+
+      try {
+        const res = await pool.query(
+          "UPDATE tasks SET status = 'cancelled', completed_at = NOW() WHERE id = $1 RETURNING agent",
+          [taskId]
+        );
+        if (res.rowCount === 0) {
+          return { result: `Task #${taskId} not found.` };
+        }
+        return { result: `✅ Task #${taskId} (Agent: ${res.rows[0].agent}) cancelled successfully.` };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        log.error({ err, taskId }, "Cancel task error");
+        return { result: `Failed to cancel task: ${msg}` };
+      }
+    },
+  });
 }

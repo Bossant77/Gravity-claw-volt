@@ -1,5 +1,12 @@
 import { config } from "./config.js";
 import { log } from "./logger.js";
+import ffmpeg from "fluent-ffmpeg";
+import ffmpegInstaller from "ffmpeg-static";
+import { PassThrough } from "stream";
+
+if (ffmpegInstaller) {
+  ffmpeg.setFfmpegPath(ffmpegInstaller as unknown as string);
+}
 
 function pcmToWav(pcmData: Buffer, sampleRate: number = 24000, numChannels: number = 1): Buffer {
   const byteRate = sampleRate * numChannels * 2;
@@ -83,7 +90,30 @@ export async function generateSpeech(text: string): Promise<{ buffer: any; mimeT
       // Gemini natively returns audio/pcm;rate=24000
       if (mime.includes("pcm") || mime === "audio/raw") {
         const wavBuffer = pcmToWav(buffer, 24000, 1);
-        return { buffer: wavBuffer, mimeType: "audio/wav", filename: "response.wav" };
+        
+        // Convert WAV to OGG (Opus) so Telegram reads it natively as a Voice Note
+        const oggBuffer = await new Promise<Buffer>((resolve, reject) => {
+          const inputStream = new PassThrough();
+          inputStream.end(wavBuffer);
+          
+          const outputStream = new PassThrough();
+          const chunks: Buffer[] = [];
+          
+          outputStream.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+          outputStream.on("end", () => resolve(Buffer.concat(chunks)));
+          outputStream.on("error", reject);
+          
+          ffmpeg(inputStream)
+            .inputFormat("wav")
+            .audioCodec("libopus")
+            .format("ogg")
+            .audioChannels(1)
+            .audioFrequency(24000)
+            .on("error", (err) => reject(new Error(`FFmpeg error: ${err.message}`)))
+            .pipe(outputStream, { end: true });
+        });
+
+        return { buffer: oggBuffer, mimeType: "audio/ogg", filename: "response.ogg" };
       }
       
       // Fallback if it miraculously returns mp3 or ogg

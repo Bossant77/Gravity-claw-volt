@@ -89,6 +89,13 @@ async function executeAgent(
     while (iterations < maxIterations) {
       iterations++;
 
+      // Check for cancellation
+      const statusRes = await pool.query("SELECT status FROM tasks WHERE id = $1", [taskId]);
+      if (statusRes.rows.length > 0 && statusRes.rows[0].status === "cancelled") {
+        log.info({ agent: agentConfig.name, taskId }, "Task cancelled mid-execution");
+        return "[Tarea cancelada por el usuario o por actualización de instrucciones.]";
+      }
+
       const result = await model.generateContent({
         contents,
         tools: agentTools.length > 0 ? [{ functionDeclarations: agentTools }] : undefined,
@@ -177,14 +184,19 @@ export async function runSolo(
   (async () => {
     try {
       const result = await executeAgent(agentConfig, task, chatId, taskId);
-      await pool.query(
-        "UPDATE tasks SET status = 'done', result = $1, completed_at = NOW() WHERE id = $2",
-        [result, taskId]
-      );
 
-      // Send result to the correct topic thread
-      const header = `🤖 **${agentConfig.name}** (${agentConfig.model}) completó:\n\n`;
-      await sendToThread(chatId, header + result, threadId);
+      // Check if cancelled before broadcasting
+      const checkStatus = await pool.query("SELECT status FROM tasks WHERE id = $1", [taskId]);
+      if (checkStatus.rows.length === 0 || checkStatus.rows[0].status !== "cancelled") {
+        await pool.query(
+          "UPDATE tasks SET status = 'done', result = $1, completed_at = NOW() WHERE id = $2",
+          [result, taskId]
+        );
+
+        // Send result to the correct topic thread
+        const header = `🤖 **${agentConfig.name}** (${agentConfig.model}) completó:\n\n`;
+        await sendToThread(chatId, header + result, threadId);
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       await pool.query(
@@ -245,6 +257,13 @@ export async function runPipeline(
       const allResults: string[] = [];
 
       for (const agentName of agentNames) {
+        // Check if parent pipeline was cancelled
+        const parentStatusRes = await pool.query("SELECT status FROM tasks WHERE id = $1", [parentTaskId]);
+        if (parentStatusRes.rows.length > 0 && parentStatusRes.rows[0].status === "cancelled") {
+          allResults.push(`[${agentName}]: Pipeline cancelado.`);
+          break;
+        }
+
         const agentConfig = getAgent(agentName);
         if (!agentConfig) {
           throw new Error(`Unknown agent in pipeline: ${agentName}`);
@@ -269,15 +288,19 @@ export async function runPipeline(
         currentInput = `Previous agent (${agentName}) produced this output:\n\n${result}\n\nContinue with the next step of the task: ${task}`;
       }
 
-      const finalResult = allResults[allResults.length - 1] ?? "No results";
-      await pool.query(
-        "UPDATE tasks SET status = 'done', result = $1, completed_at = NOW() WHERE id = $2",
-        [finalResult, parentTaskId]
-      );
+      // Only broadcast if not cancelled
+      const finalStatusRes = await pool.query("SELECT status FROM tasks WHERE id = $1", [parentTaskId]);
+      if (finalStatusRes.rows.length === 0 || finalStatusRes.rows[0].status !== "cancelled") {
+        const finalResult = allResults[allResults.length - 1] ?? "No results";
+        await pool.query(
+          "UPDATE tasks SET status = 'done', result = $1, completed_at = NOW() WHERE id = $2",
+          [finalResult, parentTaskId]
+        );
 
-      // Send result to the correct topic thread
-      const header = `🔗 **Pipeline** (${agentNames.join(" → ")}) completó:\n\n`;
-      await sendToThread(chatId, header + (allResults[allResults.length - 1] ?? ""), threadId);
+        // Send result to the correct topic thread
+        const header = `🔗 **Pipeline** (${agentNames.join(" → ")}) completó:\n\n`;
+        await sendToThread(chatId, header + (allResults[allResults.length - 1] ?? ""), threadId);
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       await pool.query(

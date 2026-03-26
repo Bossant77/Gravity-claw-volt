@@ -23,7 +23,7 @@ export function registerShellTool(): void {
   registerTool({
     name: "run_shell_command",
     description:
-      "Execute a shell command on the server and return its output. Use for system info, file operations, installing packages, etc. Dangerous commands require user confirmation.",
+      "Execute a shell command on the server and return its output. Use for system info, file operations, installing packages, etc. Dangerous commands require user confirmation. IMPORTANT: If running on Windows PowerShell, NEVER use '&&' to chain commands; use ';' instead.",
     parameters: {
       type: SchemaType.OBJECT,
       properties: {

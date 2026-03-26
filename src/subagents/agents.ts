@@ -141,4 +141,23 @@ Rules:
     ],
     maxTokens: 4096,
   });
+
+  registerAgent({
+    name: "ghostwriter",
+    description: "Digital Twin specialized in handling and replying to emails. Use for 'redacta un correo', 'contesta los correos de hoy', 'triage de inbox'.",
+    model: "gemini-3.1-pro-preview",
+    systemPrompt: `You are a Digital Twin Ghostwriter — an agent specialized in reading, triaging, and drafting emails on behalf of Santiago.
+
+Your mission: Manage the inbox and draft email responses that sound exactly like Santiago.
+
+Rules:
+- Read emails using gmail_read or search them using gmail_search.
+- When drafted to reply, use gmail_reply. To send a new email, use gmail_send.
+- Match the professional yet direct tone of Santiago. Be concise, polite, and action-oriented.
+- If an email requires context you don't have, ask the user or search your tools.
+- Write in Spanish or English depending on the original email thread.
+- Output: A summary of the emails processed and the exact drafts or actions taken.`,
+    allowedTools: ["gmail_read", "gmail_search", "gmail_send", "gmail_reply"],
+    maxTokens: 4096,
+  });
 }

@@ -2,68 +2,32 @@ import { google, type gmail_v1 } from "googleapis";
 import { log } from "../logger.js";
 import * as fs from "fs/promises";
 import * as path from "path";
+import { initGoogleAuth, getGoogleOAuthClient, getGoogleAccountConfig, getInitializedGoogleAccounts, resolveGoogleAccount, type GoogleAccountName, type GoogleAccountConfig } from "../google/auth.js";
 
 const WORKSPACE = "/home/claw/workspace";
 
 // ── Types ───────────────────────────────────────────────
 
-export type GmailAccountName = "personal1" | "personal2" | "work";
-
-export interface GmailAccountConfig {
-  name: GmailAccountName;
-  email: string;
-  refreshToken: string;
-}
+export type GmailAccountName = GoogleAccountName;
+export type GmailAccountConfig = GoogleAccountConfig;
 
 // ── Multi-Account Client ────────────────────────────────
 
 const clients = new Map<GmailAccountName, gmail_v1.Gmail>();
-const accounts = new Map<GmailAccountName, GmailAccountConfig>();
 
 /**
  * Initialize Gmail clients for all configured accounts.
  */
 export function initGmailClients(): GmailAccountName[] {
-  const clientId = process.env.GMAIL_CLIENT_ID;
-  const clientSecret = process.env.GMAIL_CLIENT_SECRET;
+  const initialized = initGoogleAuth();
 
-  if (!clientId || !clientSecret) {
-    log.warn("Gmail not configured — missing GMAIL_CLIENT_ID or GMAIL_CLIENT_SECRET");
-    return [];
-  }
-
-  const accountConfigs: GmailAccountConfig[] = [
-    {
-      name: "personal1",
-      email: process.env.GMAIL_PERSONAL1_EMAIL || "",
-      refreshToken: process.env.GMAIL_PERSONAL1_REFRESH_TOKEN || "",
-    },
-    {
-      name: "personal2",
-      email: process.env.GMAIL_PERSONAL2_EMAIL || "",
-      refreshToken: process.env.GMAIL_PERSONAL2_REFRESH_TOKEN || "",
-    },
-    {
-      name: "work",
-      email: process.env.GMAIL_WORK_EMAIL || "",
-      refreshToken: process.env.GMAIL_WORK_REFRESH_TOKEN || "",
-    },
-  ];
-
-  const initialized: GmailAccountName[] = [];
-
-  for (const account of accountConfigs) {
-    if (!account.email || !account.refreshToken) continue;
-
-    const oauth2 = new google.auth.OAuth2(clientId, clientSecret);
-    oauth2.setCredentials({ refresh_token: account.refreshToken });
+  for (const name of initialized) {
+    const oauth2 = getGoogleOAuthClient(name);
+    if (!oauth2) continue;
 
     const gmail = google.gmail({ version: "v1", auth: oauth2 });
-    clients.set(account.name, gmail);
-    accounts.set(account.name, account);
-    initialized.push(account.name);
-
-    log.info({ account: account.name, email: account.email }, "Gmail account initialized");
+    clients.set(name, gmail);
+    log.info({ account: name }, "Gmail API client created");
   }
 
   return initialized;
@@ -80,52 +44,21 @@ export function getGmailClient(name: GmailAccountName): gmail_v1.Gmail | undefin
  * Get account config by name.
  */
 export function getAccountConfig(name: GmailAccountName): GmailAccountConfig | undefined {
-  return accounts.get(name);
+  return getGoogleAccountConfig(name);
 }
 
 /**
  * Get all initialized account names.
  */
 export function getInitializedAccounts(): GmailAccountName[] {
-  return Array.from(clients.keys());
+  return getInitializedGoogleAccounts();
 }
 
 /**
  * Resolve account name from user input (fuzzy matching).
  */
 export function resolveAccount(input?: string): GmailAccountName | undefined {
-  if (!input) {
-    // Default to first available
-    const first = getInitializedAccounts()[0];
-    return first;
-  }
-
-  const lower = input.toLowerCase().trim();
-
-  // Direct match
-  if (clients.has(lower as GmailAccountName)) {
-    return lower as GmailAccountName;
-  }
-
-  // Fuzzy match
-  if (lower.includes("trabajo") || lower.includes("work") || lower.includes("oficina")) {
-    return clients.has("work") ? "work" : undefined;
-  }
-  if (lower.includes("personal") || lower.includes("1") || lower.includes("principal")) {
-    return clients.has("personal1") ? "personal1" : undefined;
-  }
-  if (lower.includes("2") || lower.includes("segunda") || lower.includes("otro")) {
-    return clients.has("personal2") ? "personal2" : undefined;
-  }
-
-  // Match by email
-  for (const [name, config] of accounts.entries()) {
-    if (config.email.toLowerCase().includes(lower)) {
-      return name;
-    }
-  }
-
-  return undefined;
+  return resolveGoogleAccount(input);
 }
 
 // ── Gmail Operations ────────────────────────────────────

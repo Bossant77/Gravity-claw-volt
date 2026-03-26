@@ -3,6 +3,7 @@ import { config } from "./config.js";
 import { log } from "./logger.js";
 import { runAgent, runVoiceAgent, clearHistory } from "./agent.js";
 import { downloadTelegramFile } from "./voice.js";
+import { generateSpeech } from "./tts.js";
 import { getRegisteredTools } from "./tools/registry.js";
 import { pool } from "./db.js";
 import { getTopicConfig } from "./topics.js";
@@ -276,9 +277,22 @@ bot.on(["message:voice", "message:video_note"], async (ctx) => {
     const { buffer, mimeType } = await downloadTelegramFile(fileId);
     const response = await runVoiceAgent(chatId, buffer, mimeType, threadId);
 
+    // 1. Reply with the text chunks (transcription + response)
     const chunks = splitMessage(response.text, 4096);
     for (const chunk of chunks) {
       await replyInThread(ctx, chunk, threadId);
+    }
+
+    // 2. Synthesize and reply with voice
+    try {
+      await ctx.replyWithChatAction("record_voice");
+      const audioBuffer = await generateSpeech(response.text);
+      await ctx.replyWithVoice(
+        new InputFile(audioBuffer, "response.ogg"), 
+        threadId ? { message_thread_id: threadId } : {}
+      );
+    } catch (ttsErr) {
+      log.error({ ttsErr, chatId, threadId }, "TTS Generation error");
     }
   } catch (err) {
     log.error({ err, chatId, threadId }, "Voice agent error");

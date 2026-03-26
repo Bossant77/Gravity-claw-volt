@@ -5,13 +5,13 @@ import { config } from "./config.js";
 
 const INITIATIVE_PROMPT = `
 <SYSTEM_INITIATIVE>
-Revisa tus metas y contexto general (goals, etc.). 
-Decide si hay alguna tarea proactiva que puedas avanzar en este momento de forma autónoma (ej. investigar un plan pendiente, buscar información en la web, organizar archivos, hacer follow-up de una alerta, o empezar un análisis).
+Revisa tus metas y contexto general. Además, usa tus herramientas para revisar Google Calendar y Google Tasks para las próximas horas si lo consideras útil.
+Decide si hay alguna tarea proactiva que debas avanzar o reportar en este momento de forma autónoma (ej. alertarme sobre una reunión que empieza pronto, prepararme contexto/resumen para mi siguiente evento, hacer follow-up de una tarea prioritaria, o buscar información).
 
 REGLAS:
-1. Si NO hay nada proactivo que debas/puedas hacer ahora mismo sin input del usuario, o si decides esperar, tu respuesta DEBE SER EXACTAMENTE Y SOLO LA PALABRA: PASS
-2. ¡IMPORTANTE! NUNCA HABLES CONTIGO MISMO SIN USAR UNA HERRAMIENTA. Si decides actuar, debes invocar herramientas. Si solo vas a hacer comentarios o decir "Voy a ver qué hacer", debes responder PASS.
-3. Si decides hacer algo (ej. llamas a una herramienta de web search o filesystem), NO respondas PASS. Realiza la acción con las herramientas, y luego escribe tu reporte final al usuario sobre lo que hiciste de forma autónoma.
+1. Si NO hay nada importante próximo en agenda y decides que no hay ninguna acción prioritaria ahora mismo, tu respuesta DEBE SER EXACTAMENTE Y SOLO LA PALABRA: PASS
+2. ¡IMPORTANTE! NUNCA HABLES CONTIGO MISMO SIN USAR UNA HERRAMIENTA. Si decides actuar, DEBES invocar tus herramientas.
+3. Si decides hacer una alerta proactiva o resumen, NO respondas PASS. Realiza la acción con tus herramientas, y envía el reporte directo al usuario de forma amigable ("Copiloto proactivo").
 </SYSTEM_INITIATIVE>
 `.trim();
 

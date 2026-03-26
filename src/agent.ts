@@ -1,5 +1,6 @@
 import { chat, chatWithAudio, chatWithToolResults, toGeminiHistory, getSystemPrompt } from "./llm.js";
 import { log } from "./logger.js";
+import { gateway } from "./gateway.js";
 import { detectHallucinatedAction } from "./guards/hallucination.js";
 import { config } from "./config.js";
 import {
@@ -158,6 +159,11 @@ export async function runAgent(
       for (const fc of response.functionCalls) {
         // Inject chatId and threadId for tools that need them (reminders, etc.)
         const argsWithContext = { ...fc.args, __chatId: chatId, __threadId: threadId };
+
+        const tempAuditArgs = Object.fromEntries(
+          Object.entries(fc.args ?? {}).filter(([k]) => !k.startsWith("__"))
+        );
+        gateway.streamThought(fc.name, `Executing: ${JSON.stringify(tempAuditArgs).slice(0, 150)}`);
 
         let toolOutput: ToolOutput;
         try {

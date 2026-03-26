@@ -65,26 +65,31 @@ async function tick(): Promise<void> {
 
 async function morningGreeting(): Promise<void> {
   const chatId = config.heartbeatChatId;
-  if (!chatId || !botRef) return;
+  const bot = botRef;
+  if (!chatId || !bot) return;
 
   // Route to General topic
   const threadId = getGeneralTopicThreadId();
 
-  const greetings = [
-    "☀️ Buenos días, Santiago. ¿En qué te ayudo hoy?",
-    "🌅 Buenos días. Tu server está corriendo bien. ¿Qué hacemos hoy?",
-    "☕ Buenos días. Estoy listo para lo que necesites.",
-    "🌤️ Buenos días, jefe. Todo en orden por aquí.",
-    "⚡ Buenos días. Gravity Claw reportándose, todo operativo.",
-  ];
-
-  const msg = greetings[Math.floor(Math.random() * greetings.length)];
-
   try {
-    await botRef.api.sendMessage(chatId, msg, threadId ? { message_thread_id: threadId } : {});
-    log.info({ threadId }, "💓 Morning greeting sent");
+    const { runAgent } = await import("./agent.js");
+    const prompt = "Es hora del reporte matutino (8:00 AM). Revisa mi Google Calendar y Google Tasks para hoy (usando tus herramientas). Dame un resumen breve, animado y proactivo de lo que me espera hoy, incluyendo sugerencias si ves reuniones juntas o tareas críticas destacadas. Usa tu tono de 'copiloto'.";
+    
+    // We run it as initiative=true so it doesn't clutter normal chat history heavily, 
+    // but we will still send it. Wait, runAgent with initiative=false saves it to history.
+    // Morning greetings are fine to be in history.
+    const response = await runAgent(chatId, prompt, undefined, true);
+    
+    // Si respondió algo válido (no "PASS"), lo enviamos
+    if (response.text && response.text !== "PASS") {
+      const msg = `🌅 *Reporte Matutino:*\\n\\n${response.text}`;
+      await bot.api.sendMessage(chatId, msg, { parse_mode: "MarkdownV2", message_thread_id: threadId }).catch(async () => {
+         await bot.api.sendMessage(chatId, msg.replace(/[\\*_{}\[\]()>#+\-.!|]/g, ''), { message_thread_id: threadId });
+      });
+      log.info({ threadId }, "💓 Smart morning greeting sent");
+    }
   } catch (err) {
-    log.error({ err }, "Failed to send morning greeting");
+    log.error({ err }, "Failed to send smart morning greeting");
   }
 }
 

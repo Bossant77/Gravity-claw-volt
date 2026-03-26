@@ -65,6 +65,9 @@ export const config = {
   /** VPS SSH config for code_deploy */
   vpsSshHost: optional("VPS_SSH_HOST", "91.99.225.220"),
   vpsSshUser: optional("VPS_SSH_USER", "molt_user"),
+
+  /** Notion Integration */
+  notionApiKey: process.env.NOTION_API_KEY ?? "",
 } as const;
 
 // ── Validate ────────────────────────────────────────────

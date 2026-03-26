@@ -246,7 +246,14 @@ bot.on("message:text", async (ctx) => {
     // Send any files the tools generated
     if (response.files && response.files.length > 0) {
       for (const file of response.files) {
-        await replyDocumentInThread(ctx, new InputFile(file.buffer, file.filename), threadId);
+        if (file.mimeType === "audio/ogg") {
+          await ctx.replyWithVoice(
+            new InputFile(file.buffer, file.filename),
+            threadId ? { message_thread_id: threadId } : {}
+          );
+        } else {
+          await replyDocumentInThread(ctx, new InputFile(file.buffer, file.filename), threadId);
+        }
       }
     }
   } catch (err) {
@@ -286,9 +293,9 @@ bot.on(["message:voice", "message:video_note"], async (ctx) => {
     // 2. Synthesize and reply with voice
     try {
       await ctx.replyWithChatAction("record_voice");
-      const audioBuffer = await generateSpeech(response.text);
+      const { buffer: audioBuffer, filename } = await generateSpeech(response.text);
       await ctx.replyWithVoice(
-        new InputFile(audioBuffer, "response.ogg"), 
+        new InputFile(audioBuffer, filename), 
         threadId ? { message_thread_id: threadId } : {}
       );
     } catch (ttsErr) {
@@ -340,7 +347,14 @@ bot.on("message:document", async (ctx) => {
 
     if (response.files && response.files.length > 0) {
       for (const file of response.files) {
-        await replyDocumentInThread(ctx, new InputFile(file.buffer, file.filename), threadId);
+        if (file.mimeType === "audio/ogg") {
+          await ctx.replyWithVoice(
+            new InputFile(file.buffer, file.filename),
+            threadId ? { message_thread_id: threadId } : {}
+          );
+        } else {
+          await replyDocumentInThread(ctx, new InputFile(file.buffer, file.filename), threadId);
+        }
       }
     }
   } catch (err) {

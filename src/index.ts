@@ -20,6 +20,7 @@ import { registerDelegateTool } from "./tools/delegate.js";
 import { registerSelfTools } from "./tools/self.js";
 import { registerCodeEditTools } from "./tools/code-edit.js";
 import { registerNotionTools } from "./tools/notion.js";
+import { registerAudioTools } from "./tools/audio.js";
 import { setHeartbeatBot, startHeartbeats } from "./heartbeat.js";
 import { registerAllAgents } from "./subagents/agents.js";
 import { setSubAgentBot } from "./subagents/runner.js";
@@ -101,6 +102,7 @@ async function registerAllTools() {
   registerListSkills();  // 🧩 Skill Ecosystem tools
   registerInstallSkill();
   registerNotionTools(); // 📓 Notion tools
+  registerAudioTools(); // 🎙️ TTS Audio tools
 
   // Automatically load crystallized tools
   await loadCustomTools();

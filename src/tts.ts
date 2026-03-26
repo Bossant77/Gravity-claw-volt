@@ -1,11 +1,41 @@
 import { config } from "./config.js";
 import { log } from "./logger.js";
 
+function pcmToWav(pcmData: Buffer, sampleRate: number = 24000, numChannels: number = 1): Buffer {
+  const byteRate = sampleRate * numChannels * 2;
+  const blockAlign = numChannels * 2;
+
+  const buffer = Buffer.alloc(44 + pcmData.length);
+
+  // RIFF chunk descriptor
+  buffer.write("RIFF", 0);
+  buffer.writeUInt32LE(36 + pcmData.length, 4);
+  buffer.write("WAVE", 8);
+
+  // fmt sub-chunk
+  buffer.write("fmt ", 12);
+  buffer.writeUInt32LE(16, 16); // Subchunk1Size
+  buffer.writeUInt16LE(1, 20); // AudioFormat
+  buffer.writeUInt16LE(numChannels, 22);
+  buffer.writeUInt32LE(sampleRate, 24);
+  buffer.writeUInt32LE(byteRate, 28);
+  buffer.writeUInt16LE(blockAlign, 32);
+  buffer.writeUInt16LE(16, 34); // BitsPerSample
+
+  // data sub-chunk
+  buffer.write("data", 36);
+  buffer.writeUInt32LE(pcmData.length, 40);
+
+  pcmData.copy(buffer, 44);
+
+  return buffer;
+}
+
 /**
  * Generates an audio buffer from text using Gemini's native multimodal TTS capabilities.
- * Uses the experimental TTS model available in the API.
+ * Returns an object with the buffer and extension (.wav or .mp3, etc.)
  */
-export async function generateSpeech(text: string): Promise<Buffer> {
+export async function generateSpeech(text: string): Promise<{ buffer: any; mimeType: string; filename: string }> {
   log.debug({ textLength: text.length }, "Generating speech via Gemini TTS");
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${config.geminiApiKey}`;
@@ -47,7 +77,18 @@ export async function generateSpeech(text: string): Promise<Buffer> {
   
   for (const part of parts) {
     if (part.inlineData && part.inlineData.mimeType.startsWith("audio/")) {
-      return Buffer.from(part.inlineData.data, "base64");
+      const mime = part.inlineData.mimeType;
+      let buffer = Buffer.from(part.inlineData.data, "base64");
+      
+      // Gemini natively returns audio/pcm;rate=24000
+      if (mime.includes("pcm") || mime === "audio/raw") {
+        const wavBuffer = pcmToWav(buffer, 24000, 1);
+        return { buffer: wavBuffer, mimeType: "audio/wav", filename: "response.wav" };
+      }
+      
+      // Fallback if it miraculously returns mp3 or ogg
+      const ext = mime.split(";")[0].split("/")[1] || "ogg";
+      return { buffer, mimeType: mime, filename: `response.${ext}` };
     }
   }
 

@@ -56,9 +56,9 @@ export function registerShellTool(): void {
         if (stdout) output += stdout;
         if (stderr) output += `\nSTDERR:\n${stderr}`;
 
-        // Truncate long output
-        if (output.length > 4000) {
-          output = output.slice(0, 4000) + "\n\n[...output truncated]";
+        // Truncate long output (increased to prevent code cutoff)
+        if (output.length > 40000) {
+          output = output.slice(0, 40000) + "\n\n[...output truncated]";
         }
 
         return { result: output || "(no output)" };

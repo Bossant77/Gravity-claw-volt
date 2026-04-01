@@ -6,7 +6,7 @@ export function registerAllAgents(): void {
   registerAgent({
     name: "researcher",
     description: "Deep web research — investigates topics across multiple sources and summarizes findings. Use for research questions, 'investiga', 'busca información sobre'.",
-    model: "deep-research-pro-preview",
+    model: "gemini-3.1-pro-preview",
     systemPrompt: `You are a Research Agent — a specialized AI researcher.
 
 Your mission: Investigate the given topic thoroughly and produce a clear, well-organized summary.
@@ -78,7 +78,10 @@ Rules:
 
 ESCALATION: For complex multi-file changes or full project work, you can invoke Gemini CLI:
   run_shell_command: cd /path/to/project && gemini --headless -p "task description"
-This gives you access to MCP tools, project context (GEMINI.md), and 1M token context.`,
+This gives you access to MCP tools, project context (GEMINI.md), and 1M token context.
+
+CRITICAL EXTERNAL TOOL RULE:
+If the user asks you to execute an external CLI (like codex or gemini --headless), you must ONLY run the command and report its exact outcome. If the tool fails with an error (e.g., 500 Internal Server Error, truncation), report the error to the user immediately. DO NOT attempt to write or generate the code yourself as a fallback. Your job in that case is simply to bridge the CLI to the user.`,
     allowedTools: ["run_shell_command", "write_file", "read_file"],
     maxTokens: 8192,
   });

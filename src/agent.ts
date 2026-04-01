@@ -214,12 +214,12 @@ export async function runAgent(
       });
 
       // Budget warning — tell the LLM it's running low on steps
-      if (iterations >= config.maxIterations - 3) {
+      if (iterations >= config.maxIterations - 5) {
         const remaining = config.maxIterations - iterations;
         conversationContents.push({
           role: "user",
           parts: [{
-            text: `⚠️ BUDGET WARNING: Te quedan ${remaining} pasos. Si la tarea es compleja, DELEGA con delegate_task AHORA. Si ya terminaste lo esencial, da tu respuesta final. NO desperdicies pasos.`,
+            text: `⚠️ BUDGET WARNING: Te quedan ${remaining} pasos. Si la tarea es compleja, DELEGA con delegate_task AHORA. Si ya delegaste o hiciste lo esencial, da tu respuesta de texto final para no desperdiciar pasos.`,
           }],
         });
       }

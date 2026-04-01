@@ -84,7 +84,7 @@ async function executeAgent(
 
   try {
     let iterations = 0;
-    const maxIterations = 15; // Increased from 8 — sub-agents need more room for multi-tool tasks
+    const maxIterations = 25; // Increased from 15 — sub-agents need more room for multi-tool tasks
 
     while (iterations < maxIterations) {
       iterations++;
